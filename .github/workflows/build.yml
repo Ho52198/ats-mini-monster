@@ -1,0 +1,143 @@
+name: Build Firmware
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ats-mini/**'
+      - 'changelog/**'
+      - 'CHANGELOG.md'
+      - '.github/workflows/build.yml'
+      - '.pre-commit-config.yaml'
+  push:
+    # tags:
+    #   - 'v*'
+    # branches:
+    #   - main
+    paths:
+      - 'ats-mini/**'
+      - 'changelog/**'
+      - 'CHANGELOG.md'
+      - '.github/workflows/build.yml'
+      - '.pre-commit-config.yaml'
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "A tag to release, e.g. v1.00"
+        type: string
+        required: false
+
+jobs:
+  build:
+    name: build ${{ matrix.board.profile }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    strategy:
+      fail-fast: true
+      matrix:
+        board:
+          - profile: esp32s3-ospi
+            # If you change this line, change it in sketch.yaml as well
+            fqbn: esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=8M,PSRAM=opi,CPUFreq=80,USBMode=hwcdc,FlashMode=qio,PartitionScheme=custom,DebugLevel=none
+            artifact-suffix: ospi
+          - profile: esp32s3-qspi
+            # If you change this line, change it in sketch.yaml as well
+            fqbn: esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=8M,PSRAM=enabled,CPUFreq=80,USBMode=hwcdc,FlashMode=qio,PartitionScheme=custom,DebugLevel=none
+            artifact-suffix: qspi
+
+    outputs:
+      slug: ${{ steps.slug.outputs.slug }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: "${{ github.event.inputs.revision || github.ref }}"
+
+      - name: Get version slug
+        id: slug
+        run: |
+          echo "slug=$(git describe --tags --match 'v?.??' --always --dirty || echo v0.00)" >> "$GITHUB_OUTPUT"
+
+      - name: Compile firmware
+        uses: arduino/compile-sketches@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sketch-paths: |
+            - ats-mini
+          fqbn: ${{ matrix.board.fqbn }}
+          cli-compile-flags: |
+            - --profile
+            - ${{ matrix.board.profile }}
+            - --export-binaries
+          # Disabled to prevent building artifact for a previous commit
+          enable-deltas-report: false
+          enable-warnings-report: true
+
+      - name: Save sketches report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          path: sketches-reports
+          name: sketches-report-${{ matrix.board.artifact-suffix }}
+
+      - name: Install uv and python
+        uses: astral-sh/setup-uv@v5
+        with:
+          pyproject-file: "pyproject.toml"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Compile the unreleased changelog
+        run: |
+          # shellcheck disable=SC2015
+          ls changelog/*.md && uv run towncrier build --keep --version Unreleased || true
+
+      - name: Prepare compiled artifact
+        run: |
+          mkdir -p artifact/ats-mini-${{ steps.slug.outputs.slug }}-${{ matrix.board.artifact-suffix }}
+          mv ats-mini/build/esp32.esp32.esp32s3/*.ino.bin ats-mini/build/esp32.esp32.esp32s3/*.ino.*.bin artifact/ats-mini-${{ steps.slug.outputs.slug }}-${{ matrix.board.artifact-suffix }}/
+          cp CHANGELOG.md artifact/ats-mini-${{ steps.slug.outputs.slug }}-${{ matrix.board.artifact-suffix }}/
+
+      - name: Upload compiled artifact
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: ${{ github.event.repository.name }}-${{ steps.slug.outputs.slug }}-${{ matrix.board.artifact-suffix }}
+          path: artifact
+
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: true
+    steps:
+      - name: Download the build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'ats-mini-*'
+          merge-multiple: true
+          path: artifact
+      - name: Archive the build artifacts
+        run: cd "artifact" && find . -mindepth 1 -maxdepth 1 -type d -exec sh -c 'zip -r "../${1%/}.zip" "$1"' _ {} \;
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLUG: ${{ needs.build.outputs.slug }}
+        run: >-
+          python -c 'import os,re; t=open(f"""artifact/ats-mini-{os.environ["SLUG"]}-ospi/CHANGELOG.md""").read(); r=re.search(f"""(^## {os.environ["SLUG"][1:].replace(".", "\\.")} .*?)(?=^## \\d|\\Z)""", t, re.MULTILINE | re.DOTALL); print(r.group(0) if r else "")' |
+          gh release create "$SLUG" --repo '${{ github.repository }}' --notes-file -
+      - name: Upload release artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FILENAMES: ${{ github.event.repository.name }}-${{ needs.build.outputs.slug }}-*.zip
+          SLUG: ${{ needs.build.outputs.slug }}
+        run: |
+          # shellcheck disable=SC2086
+          gh release upload "$SLUG" $FILENAMES --repo '${{ github.repository }}' --clobber

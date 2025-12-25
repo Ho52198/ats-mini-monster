@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where:*)",
+      "Bash(winget search:*)",
+      "Bash(curl:*)",
+      "Bash(powershell -Command \"Invoke-WebRequest -Uri 'https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Windows_64bit.zip' -OutFile '$env:TEMP\\arduino-cli.zip'\":*)",
+      "Bash(dir /s /b 'C:\\Program Files\\Arduino*')",
+      "Bash(dir /s /b %LOCALAPPDATA%Arduino*)",
+      "Bash(ARDUINO_CLI=\"/c/Users/yavor/AppData/Local/Programs/Arduino IDE/resources/app/lib/backend/resources/arduino-cli.exe\":*)",
+      "Bash(\"$ARDUINO_CLI\" version)",
+      "Bash(\"$ARDUINO_CLI\" compile --profile esp32s3-ospi)",
+      "Bash(\"$ARDUINO_CLI\" core install esp32:esp32@3.3.0)",
+      "Bash(\"$ARDUINO_CLI\" core list)",
+      "Bash(\"$ARDUINO_CLI\" compile --fqbn \"esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=8M,PSRAM=opi,CPUFreq=80,USBMode=hwcdc,FlashMode=qio,PartitionScheme=custom,DebugLevel=none\" .)",
+      "Bash(\"$ARDUINO_CLI\" compile --fqbn \"esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=8M,PSRAM=opi,CPUFreq=80,USBMode=hwcdc,FlashMode=qio,PartitionScheme=custom,DebugLevel=none\" --build-property \"build.extra_flags=-DCORE_DEBUG_LEVEL=0\" .)",
+      "Bash(\"$ARDUINO_CLI\" core install esp32:esp32@3.3.0 --config http.read-timeout=600s)",
+      "Bash(python3:*)",
+      "Bash(\"$ARDUINO_CLI\" upload --profile esp32s3-ospi -p COM5)",
+      "Bash(\"$ARDUINO_CLI\" compile --fqbn \"esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=8M,PSRAM=opi,CPUFreq=80,USBMode=hwcdc,FlashMode=qio,PartitionScheme=custom,DebugLevel=none\" --build-property \"build.extra_flags=-DCORE_DEBUG_LEVEL=0\" \"C:/Users/yavor/Downloads/ats-mini-2.33/ats-mini-2.33/ats-mini\")",
+      "Bash(\"$ARDUINO_CLI\" compile --profile esp32s3-ospi \"C:/Users/yavor/Downloads/ats-mini-2.33/ats-mini-2.33/ats-mini\")",
+      "Bash(\"$ARDUINO_CLI\" upload --profile esp32s3-ospi -p COM5 \"C:/Users/yavor/Downloads/ats-mini-2.33/ats-mini-2.33/ats-mini\")",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)"
+    ]
+  }
+}

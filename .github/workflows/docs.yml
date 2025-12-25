@@ -1,0 +1,77 @@
+name: Publish Docs
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'changelog/**'
+      - 'CHANGELOG.md'
+      - 'CONTRIBUTING.md'
+      - '.github/workflows/docs.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'changelog/**'
+      - 'CHANGELOG.md'
+      - 'CONTRIBUTING.md'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: {}
+    strategy:
+      fail-fast: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install uv and python
+        uses: astral-sh/setup-uv@v5
+        with:
+          pyproject-file: "pyproject.toml"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      # - name: Check the links
+      #   run: |
+      #     uv run sphinx-build -M linkcheck docs/source docs/build
+
+      - name: Compile the unreleased changelog
+        run: |
+          # shellcheck disable=SC2015
+          ls changelog/*.md && uv run towncrier build --keep --version Unreleased || true
+
+      - name: Build the docs
+        run: |
+          uv run sphinx-build --fail-on-warning --nitpicky docs/source docs/build
+
+      - name: Upload the docs artifact
+        id: artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build
+
+  deploy:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      id-token: write
+      pages: write
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,210 @@
+<h2>Radio Receiver Memory (99 slots)</h2>
+<div>
+  <button id="connect">Connect</button>
+  <button id="disconnect" disabled>Disconnect</button>
+  <button id="read" disabled>Read from Radio</button>
+  <button id="write" disabled>Write to Radio</button>
+  <button id="save">Save to File</button>
+  <button id="load">Load from File</button>
+  <input type="file" id="file" style="display:none">
+  <span id="status"></span>
+</div>
+<table id="memtable" border="1" cellpadding="3">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Band</th>
+      <th>Frequency</th>
+      <th>Mode</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+<div>
+  <h3>Exchange Log:</h3>
+  <textarea id="log" rows="12" cols="90" readonly></textarea>
+</div>
+The tool was written by <a href="https://t.me/airdebian">@airdebian</a>
+<script>
+const NUM_MEM = 99;
+let memories = Array(NUM_MEM).fill().map(()=>({band:'',freq:0,mode:''}));
+let port=null, reader=null, writer=null, isConnected=false, serialBuffer='', waitingMemories=false, listening=false;
+let receiveBuffer = '';
+const $ = s => document.querySelector(s);
+const tableBody = $('#memtable tbody');
+const status = $('#status');
+const logArea = $('#log');
+
+function log(msg, dir='') {
+  const prefix = dir === 'out' ? '>> ' : dir === 'in' ? '<< ' : '';
+  logArea.value += prefix + msg + '\n';
+  if (logArea.value.length > 20000) logArea.value = logArea.value.slice(-20000);
+  logArea.scrollTop = logArea.scrollHeight;
+}
+function showStatus(msg) { status.textContent = msg; }
+
+function renderTable() {
+  tableBody.innerHTML = '';
+  memories.forEach((m, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td>${i+1}</td>
+      <td><input type="text" value="${m.band}" data-idx="${i}" data-field="band"></td>
+      <td><input type="number" min="0" value="${m.freq}" data-idx="${i}" data-field="freq"></td>
+      <td><input type="text" value="${m.mode}" data-idx="${i}" data-field="mode"></td>`;
+    tableBody.appendChild(tr);
+  });
+}
+renderTable();
+
+tableBody.addEventListener('input', e => {
+  if (!e.target.dataset.idx) return;
+  const idx = +e.target.dataset.idx;
+  const field = e.target.dataset.field;
+  let val = e.target.value;
+  if (field === 'freq') val = +val;
+  memories[idx][field] = val;
+});
+
+$('#connect').onclick = async () => {
+  if (!('serial' in navigator)) { showStatus('Web Serial API not supported, use Google Chrome'); return; }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({baudRate:115200});
+    const encoder = new TextEncoderStream();
+    encoder.readable.pipeTo(port.writable);
+    writer = encoder.writable.getWriter();
+    const decoder = new TextDecoderStream();
+    port.readable.pipeTo(decoder.writable);
+    reader = decoder.readable.getReader();
+    isConnected = true;
+    $('#connect').disabled = true;
+    $('#disconnect').disabled = false;
+    $('#write').disabled = false;
+    setTimeout(() => {
+      if (isConnected) {
+        $('#read').disabled = false;
+      }
+    }, 200);
+    showStatus('Connected');
+    listening = true;
+    listenSerial();
+    log('--- Connected to port ---');
+  } catch(e){ showStatus('Connection error: '+e);}
+};
+$('#disconnect').onclick = async () => {
+  isConnected = false;
+  listening = false;
+  try {
+    if (reader) await reader.cancel();
+    if (writer) await writer.close();
+    if (port) await port.close();
+    reader = writer = port = null;
+  } catch(e){}
+  $('#connect').disabled = false;
+  $('#disconnect').disabled = true;
+  $('#read').disabled = true;
+  $('#write').disabled = true;
+  showStatus('Disconnected');
+  log('--- Port closed ---');
+};
+$('#read').onclick = async () => {
+  if (!isConnected) return;
+  serialBuffer = ''; waitingMemories = true;
+  memories = Array(NUM_MEM).fill().map(()=>({band:'',freq:0,mode:''}));
+  renderTable();
+  await sendSerial('$\n');
+  showStatus('Reading memory...');
+};
+$('#write').onclick = async () => {
+  if (!isConnected) return;
+  showStatus('Writing...');
+  for(let i=0;i<NUM_MEM;++i){
+    let m=memories[i];
+    let str = `#${(i+1).toString().padStart(2,'0')},${m.band||'ALL'},${+m.freq},${m.mode||'AM'}\r\n`;
+    await sendSerial(str);
+    await new Promise(r=>setTimeout(r,40));
+  }
+  showStatus('Memory written');
+  log('--- All slots sent ---');
+};
+$('#save').onclick = () => {
+  const blob = new Blob([JSON.stringify(memories)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'memories.json';
+  a.click();
+};
+$('#load').onclick = ()=> $('#file').click();
+$('#file').onchange = ()=>{
+  const f = $('#file').files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      let arr = JSON.parse(e.target.result);
+      if (!Array.isArray(arr) || arr.length!==NUM_MEM) throw 'Format error';
+      memories = arr.map(m=>({band:m.band||'', freq:+m.freq||0, mode:m.mode||''}));
+      renderTable();
+      showStatus('Loaded from file');
+      log('--- Memory loaded from file ---');
+    } catch(e){ showStatus('Error: '+e);}
+  };
+  reader.readAsText(f);
+};
+
+async function sendSerial(str) {
+  if (isConnected && writer) {
+    await writer.write(str);
+    log(str.replace(/\r?\n$/,''), 'out');
+  }
+}
+
+async function listenSerial() {
+  receiveBuffer = '';
+  while(isConnected && listening){
+    try {
+      const {value,done} = await reader.read();
+      if (done) break;
+      if (value) {
+        receiveBuffer += value;
+        let lines = receiveBuffer.split(/\r?\n/);
+        receiveBuffer = lines.pop();
+        for (const line of lines) {
+          if (line !== '') {
+            log(line, 'in');
+            serialBuffer += line + '\n';
+          }
+        }
+        if (waitingMemories) {
+          if (parseMemories()) {
+            waitingMemories = false;
+            showStatus('Memory read');
+          }
+        }
+      }
+    } catch(e){ break; }
+  }
+}
+
+function parseMemories() {
+  let lines = serialBuffer.split('\n');
+  let found = 0;
+  for(const line of lines){
+    const m = line.match(/^#(\d+),([^,]*),(\d+),([^,\r\n]*)/);
+    if (m) {
+      const idx = parseInt(m[1],10)-1;
+      if (idx>=0 && idx<NUM_MEM) {
+        memories[idx] = { band:m[2], freq:+m[3], mode:m[4] };
+        found++;
+      }
+    }
+  }
+  if (found > 0) {
+    renderTable();
+    serialBuffer = '';
+    if (found >= NUM_MEM) return true;
+  }
+  return false;
+}
+</script>
