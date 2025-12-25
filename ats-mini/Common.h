@@ -7,14 +7,15 @@
 
 #define RECEIVER_DESC  "ESP32-SI4732 Receiver"
 #define RECEIVER_NAME  "ATS-Mini"
-#define FIRMWARE_URL   "https://github.com/esp32-si4732/ats-mini"
+#define FIRMWARE_URL   "https://github.com/Ho52198/ats-mini-monster"
 #define MANUAL_URL     "https://esp32-si4732.github.io/ats-mini/manual.html"
 #define AUTHORS_LINE1  "Authors: PU2CLR (Ricardo Caratti),"
 #define AUTHORS_LINE2  "Volos Projects, Ralph Xavier, Sunnygold,"
 #define AUTHORS_LINE3  "Goshante, G8PTN (Dave), R9UCL (Max Arnold),"
 #define AUTHORS_LINE4  "Marat Fayzullin"
 
-#define VER_APP        233  // Firmware version
+#define VER_APP        233  // Firmware version (upstream)
+#define VER_FORK       "monster.0.1"  // Fork version suffix
 #define VER_SETTINGS   71   // Settings version
 #define VER_MEMORIES   71   // Memories version
 #define VER_BANDS      72   // Bands version
