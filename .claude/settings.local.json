@@ -21,7 +21,12 @@
       "Bash(\"$ARDUINO_CLI\" compile --profile esp32s3-ospi \"C:/Users/yavor/Downloads/ats-mini-2.33/ats-mini-2.33/ats-mini\")",
       "Bash(\"$ARDUINO_CLI\" upload --profile esp32s3-ospi -p COM5 \"C:/Users/yavor/Downloads/ats-mini-2.33/ats-mini-2.33/ats-mini\")",
       "Bash(git init:*)",
-      "Bash(git remote add:*)"
+      "Bash(git remote add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)"
     ]
   }
 }
