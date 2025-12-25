@@ -377,6 +377,30 @@ static void webInit()
     }
   });
 
+  // Direct frequency tuning: /tune?freq=10650 (FM) or /tune?freq=7200 (AM)
+  server.on("/tune", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    if(!request->hasParam("freq"))
+    {
+      request->send(400, "application/json", "{\"ok\":false,\"error\":\"Missing freq parameter\"}");
+      return;
+    }
+    long freq = request->getParam("freq")->value().toInt();
+    int result = tuneToFrequency(freq);
+    if(result == 0)
+    {
+      prefsRequestSave(SAVE_SETTINGS, false);
+      request->send(200, "application/json", "{\"ok\":true}");
+    }
+    else if(result == 1)
+    {
+      request->send(400, "application/json", "{\"ok\":false,\"error\":\"30-64 MHz not supported by hardware\"}");
+    }
+    else
+    {
+      request->send(400, "application/json", "{\"ok\":false,\"error\":\"Frequency out of range\"}");
+    }
+  });
+
   // Config page
   server.on("/config", HTTP_GET, [] (AsyncWebServerRequest *request) {
     if(loginUsername != "" && loginPassword != "")
@@ -537,6 +561,13 @@ static const String webModernStyleSheet()
 "border:1px solid var(--border-color);border-radius:10px;color:var(--text-secondary);cursor:pointer;transition:all 0.2s}"
 ".tune-btn:hover{background:var(--bg-tertiary);color:var(--text-primary);border-color:var(--accent-primary)}"
 ".tune-btn svg{width:18px;height:18px}"
+// Direct frequency input
+".direct-tune{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px}"
+".freq-input{width:90px;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;"
+"color:var(--text-primary);font-size:0.9rem;text-align:center}"
+".freq-input:focus{outline:none;border-color:var(--accent-primary)}"
+".freq-unit-select{padding:6px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;"
+"color:var(--text-primary);font-size:0.8rem;cursor:pointer}"
 // Meters - side by side
 ".meters-row{display:flex;gap:10px}"
 ".meter{flex:1;padding:10px 12px;background:var(--bg-primary);border-radius:8px}"
@@ -1010,6 +1041,11 @@ static const String webControlPage()
         "<button class='tune-btn' onclick='cmd(\"r\")'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg></button>"
         "<button class='tune-btn' onclick='cmd(\"R\")'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M18 15l-6-6-6 6'/></svg></button>"
       "</div>"
+      "<div class='direct-tune'>"
+        "<input type='text' id='freq-input' class='freq-input' placeholder='106.5 or 7200'>"
+        "<select id='freq-unit' class='freq-unit-select'><option value='MHz'>MHz</option><option value='kHz'>kHz</option></select>"
+        "<button class='btn btn-sm btn-primary' onclick='directTune()'>Go</button>"
+      "</div>"
     "</div>"
     // RSSI and SNR on same row
     "<div class='meters-row'>"
@@ -1105,6 +1141,19 @@ static const String webControlPage()
 "function cmd(c){"
   "fetch('/cmd/'+c).then(r=>r.json()).then(d=>{"
     "if(d.ok)update();"
+  "}).catch(e=>console.error(e));"
+"}"
+
+"function directTune(){"
+  "let val=document.getElementById('freq-input').value;"
+  "let unit=document.getElementById('freq-unit').value;"
+  "let freq=parseFloat(val);"
+  "if(isNaN(freq)||freq<=0){alert('Enter a valid frequency');return;}"
+  "if(unit==='MHz')freq=Math.round(freq*100);"
+  "else freq=Math.round(freq);"
+  "fetch('/tune?freq='+freq).then(r=>r.json()).then(d=>{"
+    "if(d.ok){document.getElementById('freq-input').value='';update();}"
+    "else alert(d.error||'Tune failed');"
   "}).catch(e=>console.error(e));"
 "}"
 

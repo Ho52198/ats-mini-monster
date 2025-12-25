@@ -19,6 +19,7 @@ The web control interface (`http://<device-ip>/`) has been completely redesigned
 | **Battery** | Not displayed | Battery icon + voltage in header |
 | **Menu State** | Not shown | Displays current menu state (VFO, Volume, Band, etc.) |
 | **Brightness** | Not controllable | Full brightness slider control |
+| **Direct Frequency Input** | Not available | Enter any frequency directly (MHz/kHz) |
 | **Memory Management** | Separate `/memory` page | Integrated in main UI with Tune/Edit/Delete buttons |
 | **Add Memory** | Basic form | User-friendly MHz/kHz dropdown input |
 | **Tuning Buttons** | Did not work properly | Fixed - now directly tunes the radio |
@@ -33,8 +34,9 @@ The web control interface (`http://<device-ip>/`) has been completely redesigned
 | `/config` | GET | WiFi/settings configuration |
 | `/status` | GET | JSON with all radio state (see below) |
 | `/cmd/{char}` | GET | Send command (R/r=tune, B/b=band, M/m=mode, S/s=step, W/w=bandwidth, A/a=agc, V/v=volume, L/l=brightness) |
+| `/tune?freq=N` | GET | **NEW:** Direct frequency tuning (FM: 6400-10800 in 10kHz, AM: 150-30000 in kHz) |
 | `/memory/list` | GET | JSON: all memory slots with bands/modes lists |
-| `/memory/recall?slot=N` | GET | **NEW:** Tune to memory slot N directly |
+| `/memory/recall?slot=N` | GET | Tune to memory slot N directly |
 | `/memory/set?slot=N&band=X&freq=Y&mode=Z` | GET | Save/update memory slot |
 
 **`/status` JSON Response:**
@@ -63,6 +65,7 @@ Connect via USB serial (115200 baud) to control the radio.
 
 | Feature | Description |
 |---------|-------------|
+| **Direct Frequency Tuning** | Use `FNNNN` command to tune directly (e.g., `F10650` for 106.50 MHz, `F7200` for 7200 kHz) |
 | **Menu State in Status** | Status output now includes `MENU_STATE` and `MENU_ITEM` fields |
 | **Brightness in Status** | Status output now includes `BRT` (brightness level 1-255) |
 | **Recall Memory by Slot** | Use `*N` command to tune to memory slot N (e.g., `*1`, `*15`) |
@@ -74,6 +77,7 @@ Connect via USB serial (115200 baud) to control the radio.
 |---------|-------------|
 | `R` | Tune up (rotate encoder clockwise) |
 | `r` | Tune down (rotate encoder counter-clockwise) |
+| `FNNNN` | **Direct frequency tune** (e.g., `F10650` = 106.50 MHz, `F7200` = 7200 kHz) |
 | `e` | Encoder push button (enter/select) |
 
 **Radio Parameters:**

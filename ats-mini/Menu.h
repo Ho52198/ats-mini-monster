@@ -122,6 +122,7 @@ int getTotalBleModes();
 const char *getMenuStateName();
 const char *getMenuItemName();
 bool recallMemorySlot(uint8_t slot);
+int tuneToFrequency(uint32_t freq);
 
 void doSoftMute(int16_t enc);
 void doAgc(int16_t enc);

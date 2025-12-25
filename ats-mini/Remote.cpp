@@ -437,6 +437,24 @@ int remoteDoCommand(char key)
       }
       break;
 
+    case 'F':
+      // Direct frequency tune: F10650 (FM 106.50 MHz) or F7200 (AM 7200 kHz)
+      {
+        Serial.print('F');
+        long int freq = readSerialInteger();
+        int result = tuneToFrequency(freq);
+        if(result == 0)
+        {
+          Serial.printf("%ld OK\r\n", freq);
+          event |= REMOTE_PREFS;
+        }
+        else if(result == 1)
+          Serial.printf("%ld Error: 30-64 MHz not supported\r\n", freq);
+        else
+          Serial.printf("%ld Error: Out of range\r\n", freq);
+      }
+      break;
+
     case 'T':
       Serial.println(switchThemeEditor(!switchThemeEditor()) ? "Theme editor enabled" : "Theme editor disabled");
       break;

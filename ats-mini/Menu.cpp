@@ -738,6 +738,57 @@ bool recallMemorySlot(uint8_t slot)
   return tuneToMemory(&memories[slot-1]);
 }
 
+//
+// Tune to a specific frequency directly
+// For FM: freq is in 10kHz units (e.g., 10650 = 106.50 MHz)
+// For AM/SW: freq is in kHz (e.g., 7200 = 7200 kHz)
+// Returns: 0=success, 1=frequency in unsupported gap, 2=frequency out of range
+//
+int tuneToFrequency(uint32_t freq)
+{
+  // Band indices: 0=VHF (FM), 1=ALL (AM/SW)
+  const uint8_t BAND_VHF = 0;
+  const uint8_t BAND_ALL = 1;
+
+  // Check if frequency is in FM range (6400-10800 = 64.00-108.00 MHz)
+  if(freq >= 6400 && freq <= 10800)
+  {
+    // Save current band settings
+    bands[bandIdx].currentFreq = currentFrequency + currentBFO / 1000;
+
+    // Set frequency in VHF band
+    bands[BAND_VHF].currentFreq = freq;
+
+    // Select VHF band and tune
+    selectBand(BAND_VHF);
+
+    return 0; // Success
+  }
+
+  // Check if frequency is in AM/SW range (150-30000 kHz)
+  if(freq >= 150 && freq <= 30000)
+  {
+    // Save current band settings
+    bands[bandIdx].currentFreq = currentFrequency + currentBFO / 1000;
+
+    // Set frequency in ALL band
+    bands[BAND_ALL].currentFreq = freq;
+
+    // Select ALL band and tune
+    selectBand(BAND_ALL);
+
+    return 0; // Success
+  }
+
+  // Check if frequency is in the unsupported gap (30-64 MHz)
+  if(freq > 30000 && freq < 64000)
+  {
+    return 1; // Frequency in unsupported gap (30-64 MHz)
+  }
+
+  return 2; // Frequency out of range
+}
+
 static void doMemory(int16_t enc)
 {
   memoryIdx = wrap_range(memoryIdx, enc, 0, LAST_ITEM(memories));
