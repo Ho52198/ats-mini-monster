@@ -168,6 +168,8 @@ extern uint8_t uiLayoutIdx;
 // Info panel menu state
 extern uint8_t infoPanelIdx;      // Current cursor position (0-based)
 extern bool infoPanelChangeMode;  // false=selection, true=change mode
+extern int8_t pendingBandIdx;     // Pending band index for deferred band change (-1 = none)
+extern int8_t pendingModeIdx;     // Pending mode index for deferred mode change (-1 = none)
 
 extern int8_t FmAgcIdx;
 extern int8_t AmAgcIdx;
@@ -252,6 +254,7 @@ bool isMemoryFavorite(uint32_t freq, uint8_t mode);
 // Network.cpp
 int8_t getWiFiStatus();
 char *getWiFiIPAddress();
+const char *getWiFiStatusMessage();
 void netInit(uint8_t netMode, bool showStatus = true);
 void netStop();
 bool ntpIsAvailable();

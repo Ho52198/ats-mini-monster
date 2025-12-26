@@ -115,15 +115,34 @@ void drawMessage(const char *msg)
 //
 void drawBandAndMode(const char *band, const char *mode, int x, int y)
 {
+  // Determine colors based on info panel selection state
+  uint16_t bandTextColor = TH.band_text;
+  uint16_t modeTextColor = TH.mode_text;
+  uint16_t modeBorderColor = TH.mode_border;
+
+  if(currentCmd == CMD_NONE)
+  {
+    uint16_t selColor = 0x07FF;  // Cyan for selection
+    uint16_t chgColor = 0x07E0;  // Green for change mode
+
+    if(infoPanelIdx == INFO_POS_BAND)
+      bandTextColor = infoPanelChangeMode ? chgColor : selColor;
+    if(infoPanelIdx == INFO_POS_MODE)
+    {
+      modeTextColor = infoPanelChangeMode ? chgColor : selColor;
+      modeBorderColor = modeTextColor;
+    }
+  }
+
   spr.setTextDatum(TC_DATUM);
-  spr.setTextColor(TH.band_text);
+  spr.setTextColor(bandTextColor);
   uint16_t band_width = spr.drawString(band, x, y);
 
   spr.setTextDatum(TL_DATUM);
-  spr.setTextColor(TH.mode_text);
+  spr.setTextColor(modeTextColor);
   uint16_t mode_width = spr.drawString(mode, x + band_width / 2 + 12, y + 8, 2);
 
-  spr.drawSmoothRoundRect(x + band_width / 2 + 7, y + 7, 4, 4, mode_width + 8, 17, TH.mode_border, TH.bg);
+  spr.drawSmoothRoundRect(x + band_width / 2 + 7, y + 7, 4, 4, mode_width + 8, 17, modeBorderColor, TH.bg);
 }
 
 //
@@ -190,8 +209,15 @@ void drawFrequency(uint32_t freq, int x, int y, int ux, int uy, uint8_t hl)
   // Lower 7 bits specify the selected digit
   hl &= 0x7F;
 
+  // Determine frequency color based on info panel selection
+  uint16_t freqTextColor = TH.freq_text;
+  if(currentCmd == CMD_NONE && infoPanelIdx == INFO_POS_FREQ)
+  {
+    freqTextColor = infoPanelChangeMode ? 0x07E0 : 0x07FF;  // Green or Cyan
+  }
+
   spr.setTextDatum(MR_DATUM);
-  spr.setTextColor(TH.freq_text);
+  spr.setTextColor(freqTextColor);
 
   if(currentMode==FM)
   {
@@ -201,7 +227,7 @@ void drawFrequency(uint32_t freq, int x, int y, int ux, int uy, uint8_t hl)
     // FM frequency
     spr.drawFloat(freq/100.00, 2, x, y, 7);
     spr.setTextDatum(ML_DATUM);
-    spr.setTextColor(TH.funit_text);
+    spr.setTextColor(freqTextColor != TH.freq_text ? freqTextColor : TH.funit_text);
     spr.drawString("MHz", ux, uy);
   }
   else
@@ -229,7 +255,7 @@ void drawFrequency(uint32_t freq, int x, int y, int ux, int uy, uint8_t hl)
     }
 
     // SSB/AM frequencies are measured in kHz
-    spr.setTextColor(TH.funit_text);
+    spr.setTextColor(freqTextColor != TH.freq_text ? freqTextColor : TH.funit_text);
     spr.drawString("kHz", ux, uy);
   }
 

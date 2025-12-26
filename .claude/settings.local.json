@@ -35,7 +35,11 @@
       "Bash(for:*)",
       "Bash(do echo \"Attempt $i...\")",
       "Bash(break)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(findstr:*)",
+      "Bash(powershell:*)",
+      "Bash(git checkout:*)",
+      "Bash(ping:*)"
     ]
   }
 }

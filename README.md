@@ -18,6 +18,34 @@ This fork extends the [official ATS Mini firmware](https://github.com/esp32-si47
 | Long press (>2s) | Toggle display sleep |
 | Hold + rotate (in VFO) | Direct frequency input mode |
 
+### Info Panel Navigation
+
+The left-side info panel now provides direct access to all radio parameters without opening menus:
+
+| Position | Parameter | Change Mode Behavior |
+|----------|-----------|---------------------|
+| Menu | Opens main menu | N/A |
+| Vol | Volume (0-63) | Immediate change |
+| Sql | Squelch level | Immediate change |
+| Step | Tuning step | Immediate change |
+| BW | Bandwidth | Immediate change |
+| AGC | AGC/Attenuation | Immediate change |
+| Band | Current band | **Deferred** - preview before applying |
+| Mode | FM/AM/LSB/USB | **Deferred** - preview before applying |
+| Freq | Frequency | Immediate tuning |
+
+**Navigation:**
+- **Rotate encoder** to move cursor through positions (cyan highlight)
+- **Click** to enter change mode (green highlight)
+- **Rotate** to adjust the parameter
+- **Click again** to confirm and exit change mode
+
+**Deferred Changes (Band & Mode):**
+- When changing Band or Mode, rotating shows the **pending selection** in the display
+- The radio doesn't switch until you **click to confirm**
+- This lets you preview what you're selecting before committing
+- Text color indicates state: **cyan** = selection mode, **green** = change mode
+
 ### Enhanced Web Interface
 
 The web control interface (`http://<device-ip>/`) has been completely redesigned:

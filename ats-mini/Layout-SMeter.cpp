@@ -167,10 +167,21 @@ void drawLayoutSmeter(const char *statusLine1, const char *statusLine2)
   // Set font we are going to use
   spr.setFreeFont(&Orbitron_Light_24);
 
+
   // Draw band and mode
+  // Show pending band name when in band change mode
+  const char *bandName = getCurrentBand()->bandName;
+  if(currentCmd == CMD_NONE && infoPanelIdx == INFO_POS_BAND && infoPanelChangeMode && pendingBandIdx >= 0)
+    bandName = bands[pendingBandIdx].bandName;
+
+  // Show pending mode when in mode change mode
+  int displayMode = currentMode;
+  if(currentCmd == CMD_NONE && infoPanelIdx == INFO_POS_MODE && infoPanelChangeMode && pendingModeIdx >= 0)
+    displayMode = pendingModeIdx;
+
   drawBandAndMode(
-    getCurrentBand()->bandName,
-    bandModeDesc[currentMode],
+    bandName,
+    bandModeDesc[displayMode],
     BAND_OFFSET_X, BAND_OFFSET_Y
   );
 

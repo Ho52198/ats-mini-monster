@@ -848,14 +848,22 @@ void loop()
                 needRedraw = true;
                 break;
               case INFO_POS_BAND:
-                doBand(encCount);
+                // Deferred band change - just update pending index
+                if(pendingBandIdx < 0) pendingBandIdx = bandIdx;
+                {
+                  int totalBands = getTotalBands();
+                  pendingBandIdx = (pendingBandIdx + totalBands + (encCount > 0 ? 1 : -1)) % totalBands;
+                }
                 needRedraw = true;
-                prefsRequestSave(SAVE_CUR_BAND);
                 break;
               case INFO_POS_MODE:
-                doMode(encCount);
+                // Deferred mode change - just update pending index
+                if(pendingModeIdx < 0) pendingModeIdx = currentMode;
+                {
+                  int totalModes = getTotalModes();
+                  pendingModeIdx = (pendingModeIdx + totalModes + (encCount > 0 ? 1 : -1)) % totalModes;
+                }
                 needRedraw = true;
-                prefsRequestSave(SAVE_CUR_BAND);
                 break;
               case INFO_POS_FREQ:
                 needRedraw |= doTune(encCountAccel);
@@ -969,6 +977,40 @@ void loop()
         else
         {
           // Toggle between selection and change mode
+          if(infoPanelChangeMode && infoPanelIdx == INFO_POS_BAND && pendingBandIdx >= 0)
+          {
+            // Exiting BAND change mode - apply pending band change
+            if(pendingBandIdx != bandIdx)
+            {
+              // Save current band settings before switching
+              bands[bandIdx].currentFreq = currentFrequency + currentBFO / 1000;
+              bands[bandIdx].bandMode = currentMode;
+              // Switch to new band
+              selectBand(pendingBandIdx);
+              prefsRequestSave(SAVE_CUR_BAND);
+            }
+            pendingBandIdx = -1;
+          }
+          else if(!infoPanelChangeMode && infoPanelIdx == INFO_POS_BAND)
+          {
+            // Entering BAND change mode - initialize pending band
+            pendingBandIdx = bandIdx;
+          }
+          else if(infoPanelChangeMode && infoPanelIdx == INFO_POS_MODE && pendingModeIdx >= 0)
+          {
+            // Exiting MODE change mode - apply pending mode change
+            if(pendingModeIdx != currentMode)
+            {
+              doMode(pendingModeIdx - currentMode);  // doMode uses delta, not absolute
+              prefsRequestSave(SAVE_CUR_BAND);
+            }
+            pendingModeIdx = -1;
+          }
+          else if(!infoPanelChangeMode && infoPanelIdx == INFO_POS_MODE)
+          {
+            // Entering MODE change mode - initialize pending mode
+            pendingModeIdx = currentMode;
+          }
           infoPanelChangeMode = !infoPanelChangeMode;
           needRedraw = true;
         }

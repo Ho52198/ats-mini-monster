@@ -77,38 +77,28 @@ Band *getCurrentBand() { return(&bands[bandIdx]); }
 // Main Menu
 //
 
-#define MENU_MODE         0
-#define MENU_BAND         1
-#define MENU_VOLUME       2
-#define MENU_STEP         3
-#define MENU_SEEK         4
-#define MENU_SCAN         5
-#define MENU_MEMORY       6
-#define MENU_SQUELCH      7
-#define MENU_BW           8
-#define MENU_AGC_ATT      9
-#define MENU_AVC         10
-#define MENU_SOFTMUTE    11
-#define MENU_SETTINGS    12
+#define MENU_HOME         0
+#define MENU_SEEK         1
+#define MENU_SCAN         2
+#define MENU_MEMORY       3
+#define MENU_AVC          4
+#define MENU_SOFTMUTE     5
+#define MENU_SETTINGS     6
 
-int8_t menuIdx = MENU_VOLUME;
+int8_t menuIdx = MENU_SEEK;
 
 // Info panel menu state
 uint8_t infoPanelIdx = INFO_POS_VOL;      // Current cursor position (default to Volume)
 bool infoPanelChangeMode = false;          // false=selection, true=change mode
+int8_t pendingBandIdx = -1;               // Pending band index for deferred band change (-1 = none)
+int8_t pendingModeIdx = -1;               // Pending mode index for deferred mode change (-1 = none)
 
 static const char *menu[] =
 {
-  "Mode",
-  "Band",
-  "Volume",
-  "Step",
+  "Home",
   "Seek",
   "Scan",
   "Memory",
-  "Squelch",
-  "Bandwidth",
-  "AGC/ATTN",
   "AVC",
   "SoftMute",
   "Settings",
@@ -599,10 +589,11 @@ static void clickScan(bool shortPress)
 {
   if(shortPress)
   {
-    // If scan is already running, stop it
+    // If scan is already running, stop it and return to main screen
     if(scanIsRadioRunning())
     {
       scanStopRadio();
+      currentCmd = CMD_NONE;
     }
     else
     {
@@ -1140,15 +1131,13 @@ static void clickMenu(int cmd, bool shortPress)
 
   switch(cmd)
   {
-    case MENU_STEP:     currentCmd = CMD_STEP;      break;
+    case MENU_HOME:
+      // Return to normal mode (close menu)
+      currentCmd = CMD_NONE;
+      break;
+
     case MENU_SEEK:     currentCmd = CMD_SEEK;      break;
-    case MENU_MODE:     currentCmd = CMD_MODE;      break;
-    case MENU_BW:       currentCmd = CMD_BANDWIDTH; break;
-    case MENU_AGC_ATT:  currentCmd = CMD_AGC;       break;
-    case MENU_BAND:     currentCmd = CMD_BAND;      break;
     case MENU_SETTINGS: currentCmd = CMD_SETTINGS;  break;
-    case MENU_SQUELCH:  currentCmd = CMD_SQUELCH;   break;
-    case MENU_VOLUME:   currentCmd = CMD_VOLUME;    break;
 
     case MENU_MEMORY:
       currentCmd = CMD_MEMORY;
@@ -1365,37 +1354,42 @@ static void drawCommon(const char *title, int x, int y, int sx, bool cursor = fa
   spr.setTextFont(0);
   spr.setTextColor(TH.menu_item);
   if(cursor)
-    spr.fillRoundRect(6+x, 24+y+(2*16), 66+sx, 16, 2, TH.menu_hl_bg);
+    spr.fillRoundRect(6+x, 24+y+(2*16), 66+sx, 16, 2, 0x07FF);
 }
 
 static void drawMenu(int x, int y, int sx)
 {
   spr.setTextDatum(MC_DATUM);
 
-  // Draw extended menu panel from y=1 (top of screen) to cover header and other elements
-  spr.fillSmoothRoundRect(1+x, 1, 76+sx, 169, 4, TH.menu_border);
-  spr.fillSmoothRoundRect(2+x, 2, 74+sx, 167, 4, TH.menu_bg);
+  // Smaller menu panel - fits 7 items with fixed positions and moving cursor
+  int count = ITEM_COUNT(menu);
+  int menuHeight = 22 + (count * 16) + 8;  // Header + items + padding
+  spr.fillSmoothRoundRect(1+x, 1, 76+sx, menuHeight, 4, TH.menu_border);
+  spr.fillSmoothRoundRect(2+x, 2, 74+sx, menuHeight-2, 4, TH.menu_bg);
   spr.setTextColor(TH.menu_hdr);
 
-  // Header and divider at fixed positions (not y-relative) to maximize item space
+  // Header and divider
   spr.drawString("Menu", 40+x+(sx/2), 10, 2);
   spr.drawLine(1+x, 18, 76+sx, 18, TH.menu_border);
 
   spr.setTextFont(0);
-  spr.setTextColor(TH.menu_item);
-  spr.fillRoundRect(6+x, 80, 66+sx, 16, 2, TH.menu_hl_bg);
 
-  int count = ITEM_COUNT(menu);
-  for(int i=-4 ; i<5 ; i++)
+  // Draw cursor highlight at current selection (menuIdx * 16 + base offset)
+  int cursorY = 24 + (menuIdx * 16);
+  spr.fillRoundRect(6+x, cursorY, 66+sx, 16, 2, 0x07FF);  // Cyan cursor
+
+  // Draw all menu items at fixed positions
+  for(int i=0 ; i<count ; i++)
   {
-    if(i==0) {
-      drawZoomedMenu(menu[abs((menuIdx+count+i)%count)]);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+    int itemY = 32 + (i * 16);  // Centered in 16px row
+    if(i == menuIdx) {
+      drawZoomedMenu(menu[i]);
+      spr.setTextColor(0x0000, 0x07FF);  // Cyan background
     } else {
       spr.setTextColor(TH.menu_item);
     }
     spr.setTextDatum(MC_DATUM);
-    spr.drawString(menu[abs((menuIdx+count+i)%count)], 40+x+(sx/2), 88+(i*16), 2);
+    spr.drawString(menu[i], 40+x+(sx/2), itemY, 2);
   }
 }
 
@@ -1414,14 +1408,14 @@ static void drawSettings(int x, int y, int sx)
 
   spr.setTextFont(0);
   spr.setTextColor(TH.menu_item);
-  spr.fillRoundRect(6+x, 80, 66+sx, 16, 2, TH.menu_hl_bg);
+  spr.fillRoundRect(6+x, 80, 66+sx, 16, 2, 0x07FF);
 
   int count = ITEM_COUNT(settings);
   for(int i=-4 ; i<5 ; i++)
   {
     if(i==0) {
       drawZoomedMenu(settings[abs((settingsIdx+count+i)%count)]);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1433,14 +1427,14 @@ static void drawSettings(int x, int y, int sx)
 
 static void drawMode(int x, int y, int sx)
 {
-  drawCommon(menu[MENU_MODE], x, y, sx, true);
+  drawCommon("Mode", x, y, sx, true);
 
   int count = ITEM_COUNT(bandModeDesc);
   for(int i=-2 ; i<3 ; i++)
   {
     if(i==0) {
       drawZoomedMenu(bandModeDesc[abs((currentMode+count+i)%count)]);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1456,13 +1450,13 @@ static void drawStep(int x, int y, int sx)
   int count = getLastStep(currentMode) + 1;
   int idx   = bands[bandIdx].currentStepIdx + count;
 
-  drawCommon(menu[MENU_STEP], x, y, sx, true);
+  drawCommon("Step", x, y, sx, true);
 
   for(int i=-2 ; i<3 ; i++)
   {
     if(i==0) {
       drawZoomedMenu(steps[currentMode][abs((idx+i)%count)].desc);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1490,8 +1484,26 @@ static void drawSeek(int x, int y, int sx)
 
 static void drawScan(int x, int y, int sx)
 {
-  drawCommon(menu[MENU_SCAN], x, y, sx);
+  // Custom header with percentage when scanning
   spr.setTextDatum(MC_DATUM);
+
+  // Draw standard menu panel
+  spr.setTextColor(TH.menu_hdr);
+  spr.fillSmoothRoundRect(1+x, 1+y, 76+sx, 110, 4, TH.menu_border);
+  spr.fillSmoothRoundRect(2+x, 2+y, 74+sx, 108, 4, TH.menu_bg);
+
+  // Draw header with percentage if scanning
+  if(scanIsRadioRunning())
+  {
+    char header[16];
+    sprintf(header, "Scan %d%%", scanGetProgress());
+    spr.drawString(header, 40+x+(sx/2), 12+y, 2);
+  }
+  else
+  {
+    spr.drawString(menu[MENU_SCAN], 40+x+(sx/2), 12+y, 2);
+  }
+  spr.drawLine(1+x, 23+y, 76+sx, 23+y, TH.menu_border);
 
   // Check if scan aborted with error
   if(scanHasError())
@@ -1510,14 +1522,8 @@ static void drawScan(int x, int y, int sx)
     uint8_t progress = scanGetProgress();
     uint16_t current = scanGetCount();
     uint16_t total = scanGetMaxPoints();
-    char progressText[24];
     char statsText[24];
-    sprintf(progressText, "%d%%", progress);
     sprintf(statsText, "%d/%d", current, total);
-
-    // Draw percentage ABOVE progress bar
-    spr.setTextColor(TH.menu_hl_text);
-    spr.drawString(progressText, 40+x+(sx/2), 50+y-30, 2);
 
     // Draw progress bar background
     spr.fillRect(x + 10, 50+y-15, sx - 20, 10, TH.smeter_bar_empty);
@@ -1531,7 +1537,9 @@ static void drawScan(int x, int y, int sx)
       // Show user's selected step
       char stepText[16];
       uint16_t userStep = getCurrentStep()->step;
-      if(userStep >= 1000)
+      if(currentMode == FM)
+        sprintf(stepText, "Step: %dk", userStep * 10);  // FM step is in 10kHz units
+      else if(userStep >= 1000)
         sprintf(stepText, "Step: %dM", userStep / 1000);
       else
         sprintf(stepText, "Step: %dk", userStep);
@@ -1591,7 +1599,9 @@ static void drawScan(int x, int y, int sx)
     {
       // ALL band uses user's selected step
       uint16_t userStep = getCurrentStep()->step;
-      if(userStep >= 1000)
+      if(currentMode == FM)
+        sprintf(stepText, "Step: %dk", userStep * 10);  // FM step is in 10kHz units
+      else if(userStep >= 1000)
         sprintf(stepText, "Step: %dM", userStep / 1000);
       else
         sprintf(stepText, "Step: %dk", userStep);
@@ -1629,14 +1639,14 @@ static void drawScan(int x, int y, int sx)
 
 static void drawBand(int x, int y, int sx)
 {
-  drawCommon(menu[MENU_BAND], x, y, sx, true);
+  drawCommon("Band", x, y, sx, true);
 
   int count = ITEM_COUNT(bands);
   for(int i=-2 ; i<3 ; i++)
   {
     if(i==0) {
       drawZoomedMenu(bands[abs((bandIdx+count+i)%count)].bandName);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1651,13 +1661,13 @@ static void drawBandwidth(int x, int y, int sx)
   int count = getLastBandwidth(currentMode) + 1;
   int idx   = bands[bandIdx].bandwidthIdx + count;
 
-  drawCommon(menu[MENU_BW], x, y, sx, true);
+  drawCommon("Bandwidth", x, y, sx, true);
 
   for(int i=-2 ; i<3 ; i++)
   {
     if(i==0) {
       drawZoomedMenu(bandwidths[currentMode][abs((idx+i)%count)].desc);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1676,7 +1686,7 @@ static void drawSleepMode(int x, int y, int sx)
   {
     if(i==0) {
       drawZoomedMenu(sleepModeDesc[abs((sleepModeIdx+count+i)%count)]);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1695,7 +1705,7 @@ static void drawBleMode(int x, int y, int sx)
   {
     if(i==0) {
       drawZoomedMenu(bleModeDesc[abs((bleModeIdx+count+i)%count)]);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1719,7 +1729,7 @@ static void drawWiFiMode(int x, int y, int sx)
   {
     if(i==0) {
       drawZoomedMenu(wifiModeDesc[abs((wifiModeIdx+count+i)%count)]);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1738,7 +1748,7 @@ static void drawTheme(int x, int y, int sx)
   {
     if(i==0) {
       drawZoomedMenu(theme[abs((themeIdx+count+i)%count)].name);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1757,7 +1767,7 @@ static void drawUILayout(int x, int y, int sx)
   {
     if(i==0) {
       drawZoomedMenu(uiLayoutDesc[abs((uiLayoutIdx+count+i)%count)]);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1781,7 +1791,7 @@ static void drawRDSMode(int x, int y, int sx)
   {
     if(i==0) {
       drawZoomedMenu(rdsMode[abs((rdsModeIdx+count+i)%count)].desc);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1800,7 +1810,7 @@ static void drawNamePriority(int x, int y, int sx)
   {
     if(i==0) {
       drawZoomedMenu(namePriorityDesc[abs((namePriorityIdx+count+i)%count)]);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1822,7 +1832,7 @@ static void drawUTCOffset(int x, int y, int sx)
     if(i==0)
     {
       drawZoomedMenu(utcOffsets[abs((idx+count+i)%count)].desc);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     }
     else
     {
@@ -1856,7 +1866,7 @@ static void drawMemory(int x, int y, int sx)
 
     if(i==0) {
       drawZoomedMenu(text);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -1868,8 +1878,8 @@ static void drawMemory(int x, int y, int sx)
 
 static void drawVolume(int x, int y, int sx)
 {
-  drawCommon(menu[MENU_VOLUME], x, y, sx);
-  drawZoomedMenu(menu[MENU_VOLUME]);
+  drawCommon("Volume", x, y, sx);
+  drawZoomedMenu("Volume");
   spr.setTextDatum(MC_DATUM);
 
   spr.setTextColor(TH.menu_param);
@@ -1886,8 +1896,8 @@ static void drawVolume(int x, int y, int sx)
 
 static void drawAgc(int x, int y, int sx)
 {
-  drawCommon(menu[MENU_AGC_ATT], x, y, sx);
-  drawZoomedMenu(menu[MENU_AGC_ATT]);
+  drawCommon("AGC/ATTN", x, y, sx);
+  drawZoomedMenu("AGC/ATTN");
   spr.setTextDatum(MC_DATUM);
   spr.setTextColor(TH.menu_param);
 
@@ -1910,8 +1920,8 @@ static void drawAgc(int x, int y, int sx)
 
 static void drawSquelch(int x, int y, int sx)
 {
-  drawCommon(menu[MENU_SQUELCH], x, y, sx);
-  drawZoomedMenu(menu[MENU_SQUELCH]);
+  drawCommon("Squelch", x, y, sx);
+  drawZoomedMenu("Squelch");
   spr.setTextDatum(MC_DATUM);
 
   if(currentSquelch)
@@ -1987,7 +1997,7 @@ static void drawFmRegion(int x, int y, int sx)
   {
     if(i==0) {
       drawZoomedMenu(fmRegions[abs((FmRegionIdx+count+i)%count)].desc);
-      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+      spr.setTextColor(0x0000, 0x07FF);
     } else {
       spr.setTextColor(TH.menu_item);
     }
@@ -2048,8 +2058,8 @@ static void drawScrollDir(int x, int y, int sx)
 static uint16_t getInfoTextColor(uint8_t pos)
 {
   if(infoPanelIdx != pos) return TH.box_text;
-  // Selected: use black text in change mode, otherwise menu_hl_text
-  return infoPanelChangeMode ? 0x0000 : TH.menu_hl_text;
+  // Selected: always use black text on cyan/green background
+  return 0x0000;
 }
 
 static void drawInfo(int x, int y, int sx)
@@ -2071,7 +2081,7 @@ static void drawInfo(int x, int y, int sx)
   // Draw cursor highlight for current position (only if within info panel)
   if(infoPanelIdx < INFO_PANEL_ROWS)
   {
-    uint16_t hlColor = infoPanelChangeMode ? TH.menu_hl_bg_change : TH.menu_hl_bg;
+    uint16_t hlColor = infoPanelChangeMode ? 0x07E0 : 0x07FF;  // Green for change, cyan for selection
     spr.fillRoundRect(4+x, rowY[infoPanelIdx]-4, 70+sx, 16, 2, hlColor);
   }
 
