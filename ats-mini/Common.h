@@ -15,10 +15,13 @@
 #define AUTHORS_LINE4  "Marat Fayzullin"
 
 #define VER_APP        233  // Firmware version (upstream)
-#define VER_FORK       "monster.0.1"  // Fork version suffix
-#define VER_SETTINGS   71   // Settings version
-#define VER_MEMORIES   71   // Memories version
+#define VER_FORK       "monster.0.2"  // Fork version suffix
+#define VER_SETTINGS   72   // Settings version
+#define VER_MEMORIES   72   // Memories version
 #define VER_BANDS      72   // Bands version
+
+// Memory flags
+#define MEM_FLAG_FAVORITE  0x01  // Memory is marked as favorite
 
 // Modes
 #define FM            0
@@ -98,7 +101,8 @@ typedef struct __attribute__((packed))
   uint32_t freq;          // Frequency (Hz)
   uint8_t  band;          // Band
   uint8_t  mode;          // Modulation
-  char     name[10];      // Name
+  uint8_t  flags;         // Flags (bit 0 = favorite)
+  char     name[12];      // Name (12 chars max)
 } Memory;
 
 typedef struct
@@ -160,6 +164,7 @@ extern uint8_t rdsModeIdx;
 extern uint8_t bleModeIdx;
 extern uint8_t wifiModeIdx;
 extern uint8_t FmRegionIdx;
+extern uint8_t namePriorityIdx;
 
 extern int8_t agcIdx;
 extern int8_t agcNdx;
@@ -181,10 +186,24 @@ bool checkStopSeeking();
 float batteryMonitor();
 bool drawBattery(int x, int y);
 
-// Scan.c
+// Scan.cpp
 void scanRun(uint16_t centerFreq, uint16_t step);
 float scanGetRSSI(uint16_t freq);
 float scanGetSNR(uint16_t freq);
+bool scanIsReady();
+bool scanIsRunning();
+uint16_t scanGetStartFreq();
+uint16_t scanGetStep();
+uint16_t scanGetCount();
+bool scanGetDataPoint(uint16_t index, uint8_t *rssi, uint8_t *snr);
+void scanStartAsync(uint16_t centerFreq, uint16_t step, uint16_t points);
+void scanStartAsyncFrom(uint16_t startFreq, uint16_t step, uint16_t points);
+bool scanTickAsync();
+// Per-band scan cache functions
+void scanSaveToBandCache(uint8_t bandIndex);
+bool scanLoadFromBandCache(uint8_t bandIndex);
+bool scanHasDataForBand(uint8_t bandIndex);
+void scanInvalidateBandCache(uint8_t bandIndex);
 
 // Station.c
 const char *getStationName();
@@ -195,6 +214,8 @@ uint16_t getRdsPiCode();
 void clearStationInfo();
 bool checkRds();
 bool identifyFrequency(uint16_t freq, bool periodic = false);
+const char *findMemoryName(uint32_t freq, uint8_t mode);
+bool isMemoryFavorite(uint32_t freq, uint8_t mode);
 
 // Network.cpp
 int8_t getWiFiStatus();

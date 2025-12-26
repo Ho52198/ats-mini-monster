@@ -203,8 +203,8 @@ static bool showRdsTime(const char *rdsTime)
   // If NTP time available, do not use RDS time
   if(!rdsTime || ntpIsAvailable()) return(false);
 
-  // The standard RDS time format is “HH:MM”.
-  // or sometimes more complex like “DD.MM.YY,HH:MM”.
+  // The standard RDS time format is ï¿½HH:MMï¿½.
+  // or sometimes more complex like ï¿½DD.MM.YY,HH:MMï¿½.
   const char *timeField = strstr(rdsTime, ":");
 
   // If we find a valid time format...
@@ -287,6 +287,33 @@ static const char *findNameByFreq(uint16_t freq, const NamedFreq *db, uint16_t d
   return(0);
 }
 
+//
+// Find memory name by frequency and mode
+// Returns pointer to name if found, NULL otherwise
+//
+const char *findMemoryName(uint32_t freq, uint8_t mode)
+{
+  for(int i = 0; i < getTotalMemories(); i++)
+  {
+    if(memories[i].freq == freq && memories[i].mode == mode && memories[i].name[0])
+      return memories[i].name;
+  }
+  return NULL;
+}
+
+//
+// Check if current frequency is a favorite memory
+//
+bool isMemoryFavorite(uint32_t freq, uint8_t mode)
+{
+  for(int i = 0; i < getTotalMemories(); i++)
+  {
+    if(memories[i].freq == freq && memories[i].mode == mode)
+      return (memories[i].flags & MEM_FLAG_FAVORITE) != 0;
+  }
+  return false;
+}
+
 static const char *findScheduleByFreq(uint16_t freq, bool periodic)
 {
   uint8_t hour, minute;
@@ -329,24 +356,39 @@ static const char *findScheduleByFreq(uint16_t freq, bool periodic)
   return(entry? entry->name : 0);
 }
 
+// Name priority order lookup
+// Priority indices: 0=Name,RDS,EiBi 1=Name,EiBi,RDS 2=RDS,Name,EiBi
+//                   3=RDS,EiBi,Name 4=EiBi,Name,RDS 5=EiBi,RDS,Name
+// Each position: 0=Name(memory), 1=RDS(handled separately), 2=EiBi
+static const uint8_t namePriorityOrder[6][3] = {
+  {0, 1, 2},  // Name, RDS, EiBi
+  {0, 2, 1},  // Name, EiBi, RDS
+  {1, 0, 2},  // RDS, Name, EiBi
+  {1, 2, 0},  // RDS, EiBi, Name
+  {2, 0, 1},  // EiBi, Name, RDS
+  {2, 1, 0},  // EiBi, RDS, Name
+};
+
 bool identifyFrequency(uint16_t freq, bool periodic)
 {
   const char *name;
   static uint16_t last_freq = 0;
   static bool name_found = false;
 
-  // RDS has priority on FM
-  if(currentMode==FM) return(false);
-
   // Do not try to look up static names more than once for the same freq
   if(periodic && last_freq==freq && name_found) return(false);
   last_freq = freq;
   name_found = false;
 
-  // For non-periodic calls the name will be found earlier
+  // Convert frequency to the format stored in memories
+  // For FM: freq is in 10kHz units, memories store in Hz (freq * 10000)
+  // For AM/SSB: freq is in kHz, memories store in Hz (freq * 1000)
+  uint32_t memFreq = (currentMode == FM) ? (uint32_t)freq * 10000 : (uint32_t)freq * 1000;
+
+  // For non-periodic calls, try static names first (CB, named frequencies)
   if(!periodic)
   {
-    // Try list of named frequencies first
+    // Try list of named frequencies first (FT8, SSTV, etc.)
     name = findNameByFreq(freq, namedFrequencies, ITEM_COUNT(namedFrequencies));
     if(name)
     {
@@ -363,7 +405,42 @@ bool identifyFrequency(uint16_t freq, bool periodic)
     }
   }
 
-  // Try EIBI schedule
-  name = findScheduleByFreq(freq, periodic);
-  return(showStationName(name? name : "", true));
+  // Apply priority order for Name, RDS, EIBI
+  // RDS is handled externally (in checkRds()), so we only handle Name and EIBI here
+  // If RDS comes first in priority, we return false to let RDS handle it
+  uint8_t prioIdx = namePriorityIdx < 6 ? namePriorityIdx : 0;
+
+  for(int i = 0; i < 3; i++)
+  {
+    switch(namePriorityOrder[prioIdx][i])
+    {
+      case 0: // Memory name
+        name = findMemoryName(memFreq, currentMode);
+        if(name)
+        {
+          name_found = true;
+          return(showStationName(name));
+        }
+        break;
+
+      case 1: // RDS - let the RDS system handle it (for FM mode)
+        if(currentMode == FM) return(false);
+        break;
+
+      case 2: // EIBI
+        if(currentMode != FM)
+        {
+          name = findScheduleByFreq(freq, periodic);
+          if(name)
+          {
+            name_found = true;
+            return(showStationName(name, true));
+          }
+        }
+        break;
+    }
+  }
+
+  // Clear station name if nothing found
+  return(showStationName("", true));
 }

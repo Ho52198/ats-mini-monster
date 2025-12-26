@@ -193,6 +193,7 @@ void prefsSave(uint32_t items)
     prefs.putUChar("FmRegion",    FmRegionIdx);    // FM region
     prefs.putUChar("UILayout",    uiLayoutIdx);    // UI Layout
     prefs.putUChar("BLEMode",     bleModeIdx);     // Bluetooth mode
+    prefs.putUChar("NamePrio",    namePriorityIdx); // Name priority
 
     // Done with global settings
     prefs.end();
@@ -266,6 +267,7 @@ bool prefsLoad(uint32_t items)
     FmRegionIdx    = prefs.getUChar("FmRegion", FmRegionIdx);   // FM region
     uiLayoutIdx    = prefs.getUChar("UILayout", uiLayoutIdx);   // UI Layout
     bleModeIdx     = prefs.getUChar("BLEMode", bleModeIdx);     // Bluetooth mode
+    namePriorityIdx = prefs.getUChar("NamePrio", namePriorityIdx); // Name priority
 
     // Done with global settings
     prefs.end();
@@ -356,4 +358,121 @@ bool nvsErase()
          nvs_flash_init() == ESP_OK &&
          nvs_flash_erase_partition(STORAGE_PARTITION) == ESP_OK &&
          nvs_flash_init_partition(STORAGE_PARTITION) == ESP_OK);
+}
+
+//
+// Scan data persistence using LittleFS
+//
+
+#define SCAN_POINTS 200
+
+// Structure to save scan data to file
+struct SavedScanData
+{
+  uint16_t startFreq;
+  uint16_t step;
+  uint16_t count;
+  uint8_t  minRSSI;
+  uint8_t  maxRSSI;
+  uint8_t  minSNR;
+  uint8_t  maxSNR;
+  uint8_t  rssi[SCAN_POINTS];
+  uint8_t  snr[SCAN_POINTS];
+};
+
+void prefsSaveScan(uint8_t idx)
+{
+  char filename[32];
+  sprintf(filename, "/scan_%d.bin", idx);
+
+  // Get scan data from cache
+  uint16_t startFreq, step, count;
+  uint8_t minRSSI, maxRSSI, minSNR, maxSNR;
+
+  // Check if we have valid scan data for this band
+  if(!scanIsReady() && !scanHasDataForBand(idx))
+    return;
+
+  // Try to load from band cache first
+  if(!scanLoadFromBandCache(idx))
+    return;
+
+  fs::File file = LittleFS.open(filename, "w");
+  if(!file)
+    return;
+
+  SavedScanData data;
+  data.startFreq = scanGetStartFreq();
+  data.step = scanGetStep();
+  data.count = scanGetCount();
+
+  // Get min/max values - we need to recalculate from data
+  data.minRSSI = 255;
+  data.maxRSSI = 0;
+  data.minSNR = 255;
+  data.maxSNR = 0;
+
+  for(uint16_t i = 0; i < data.count && i < SCAN_POINTS; i++)
+  {
+    uint8_t rssi, snr;
+    if(scanGetDataPoint(i, &rssi, &snr))
+    {
+      data.rssi[i] = rssi;
+      data.snr[i] = snr;
+      if(rssi < data.minRSSI) data.minRSSI = rssi;
+      if(rssi > data.maxRSSI) data.maxRSSI = rssi;
+      if(snr < data.minSNR) data.minSNR = snr;
+      if(snr > data.maxSNR) data.maxSNR = snr;
+    }
+  }
+
+  file.write((uint8_t*)&data, sizeof(data));
+  file.close();
+}
+
+// ScanPoint type for scan data - must match the one in Scan.cpp
+typedef struct { uint8_t rssi; uint8_t snr; } ScanPoint;
+
+// External function to set band cache data
+extern void scanSetBandCacheData(uint8_t bandIndex, uint16_t startFreq, uint16_t step,
+                        uint16_t count, uint8_t minRSSI, uint8_t maxRSSI,
+                        uint8_t minSNR, uint8_t maxSNR, const ScanPoint *data);
+
+bool prefsLoadScan(uint8_t idx)
+{
+  char filename[32];
+  sprintf(filename, "/scan_%d.bin", idx);
+
+  fs::File file = LittleFS.open(filename, "r");
+  if(!file)
+    return false;
+
+  SavedScanData data;
+  size_t bytesRead = file.read((uint8_t*)&data, sizeof(data));
+  file.close();
+
+  if(bytesRead != sizeof(data))
+    return false;
+
+  // Convert to ScanPoint array format for the cache
+  ScanPoint points[SCAN_POINTS];
+
+  for(uint16_t i = 0; i < data.count && i < SCAN_POINTS; i++)
+  {
+    points[i].rssi = data.rssi[i];
+    points[i].snr = data.snr[i];
+  }
+
+  scanSetBandCacheData(idx, data.startFreq, data.step, data.count,
+                       data.minRSSI, data.maxRSSI, data.minSNR, data.maxSNR, points);
+
+  return true;
+}
+
+void prefsLoadAllScans()
+{
+  for(int i = 0; i < getTotalBands(); i++)
+  {
+    prefsLoadScan(i);
+  }
 }

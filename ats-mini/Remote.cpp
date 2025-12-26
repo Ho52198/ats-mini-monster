@@ -129,7 +129,13 @@ static void remoteGetMemories()
 {
   for (uint8_t i = 0; i < getTotalMemories(); i++) {
     if (memories[i].freq) {
-      Serial.printf("#%02d,%s,%ld,%s\r\n", i + 1, bands[memories[i].band].bandName, memories[i].freq, bandModeDesc[memories[i].mode]);
+      Serial.printf("#%03d,%s,%ld,%s,%s,%c\r\n",
+        i + 1,
+        bands[memories[i].band].bandName,
+        memories[i].freq,
+        bandModeDesc[memories[i].mode],
+        memories[i].name[0] ? memories[i].name : "",
+        (memories[i].flags & MEM_FLAG_FAVORITE) ? 'Y' : 'N');
     }
   }
 }
@@ -139,6 +145,7 @@ static bool remoteSetMemory()
 {
   Serial.print('#');
   Memory mem;
+  memset(&mem, 0, sizeof(mem));
   uint32_t freq = 0;
 
   long int slot = readSerialInteger();
@@ -162,14 +169,32 @@ static bool remoteSetMemory()
     return showError("No such band");
 
   freq = readSerialInteger();
-  if (readSerialChar() != ',')
-    return showError("Expected ','");
+  char sep = readSerialChar();
+  if (sep != ',' && sep != '\r' && sep != '\n')
+    return showError("Expected ',' or newline");
 
   char mode[4];
   readSerialString(mode, 4);
+
+  // Check for optional name and favorite fields
+  char ch = Serial.peek();
+  if (ch == ',') {
+    readSerialChar(); // consume comma
+    readSerialString(mem.name, sizeof(mem.name));
+
+    ch = Serial.peek();
+    if (ch == ',') {
+      readSerialChar(); // consume comma
+      char favChar = readSerialChar();
+      if (favChar == 'Y' || favChar == 'y' || favChar == '1')
+        mem.flags |= MEM_FLAG_FAVORITE;
+    }
+  }
+
   if (!expectNewline())
     return showError("Expected newline");
   Serial.println();
+
   mem.mode = 15;
   for (int i = 0; i < getTotalModes(); i++) {
     if (strcmp(bandModeDesc[i], mode) == 0) {
@@ -274,7 +299,7 @@ void remotePrintStatus()
   uint16_t tuningCapacitor = rx.getAntennaTuningCapacitor();
 
   // Remote serial
-  Serial.printf("%u,%u,%d,%d,%s,%s,%s,%s,%hu,%hu,%hu,%hu,%hu,%.2f,%hu,%hu,%s,%s\r\n",
+  Serial.printf("%uM,%u,%d,%d,%s,%s,%s,%s,%hu,%hu,%hu,%hu,%hu,%.2f,%hu,%hu,%s,%s\r\n",
                 VER_APP,
                 currentFrequency,
                 currentBFO,
@@ -418,7 +443,7 @@ int remoteDoCommand(char key)
         event |= REMOTE_PREFS;
       break;
     case '*':
-      // Recall memory slot: *01 to *99
+      // Recall memory slot: *001 to *200
       {
         Serial.print('*');
         long int slot = readSerialInteger();
@@ -426,7 +451,11 @@ int remoteDoCommand(char key)
         {
           if(recallMemorySlot(slot))
           {
-            Serial.printf("%ld OK\r\n", slot);
+            Memory *m = &memories[slot-1];
+            if(m->name[0])
+              Serial.printf("%ld OK %s\r\n", slot, m->name);
+            else
+              Serial.printf("%ld OK\r\n", slot);
             event |= REMOTE_PREFS;
           }
           else
@@ -452,6 +481,153 @@ int remoteDoCommand(char key)
           Serial.printf("%ld Error: 30-64 MHz not supported\r\n", freq);
         else
           Serial.printf("%ld Error: Out of range\r\n", freq);
+      }
+      break;
+
+    case '=':
+      // Direct parameter setting: =B,VHF =M,AM =S,100k =W,Auto =A,5
+      {
+        Serial.print('=');
+        char param = readSerialChar();
+        if(readSerialChar() != ',')
+        {
+          showError("Expected ','");
+          break;
+        }
+        char value[16];
+        readSerialString(value, sizeof(value));
+        Serial.println();
+
+        int result = -1;
+        switch(param)
+        {
+          case 'B': // Band
+            result = setBandByName(value);
+            if(result >= 0)
+              Serial.printf("Band=%s OK\r\n", value);
+            else
+              Serial.printf("Band=%s Error: Not found\r\n", value);
+            break;
+          case 'M': // Mode
+            result = setModeByName(value);
+            if(result >= 0)
+              Serial.printf("Mode=%s OK\r\n", value);
+            else
+              Serial.printf("Mode=%s Error: Not valid for band\r\n", value);
+            break;
+          case 'S': // Step
+            result = setStepByName(value);
+            if(result >= 0)
+              Serial.printf("Step=%s OK\r\n", value);
+            else
+              Serial.printf("Step=%s Error: Not valid for mode\r\n", value);
+            break;
+          case 'W': // Bandwidth
+            result = setBandwidthByName(value);
+            if(result >= 0)
+              Serial.printf("BW=%s OK\r\n", value);
+            else
+              Serial.printf("BW=%s Error: Not valid for mode\r\n", value);
+            break;
+          case 'A': // AGC
+            {
+              int agcVal = atoi(value);
+              if(setAgcValue(agcVal))
+              {
+                Serial.printf("AGC=%d OK\r\n", agcVal);
+                result = 0;
+              }
+              else
+                Serial.printf("AGC=%d Error: Out of range (0-%d)\r\n", agcVal, getMaxAgc());
+            }
+            break;
+          default:
+            Serial.printf("%c Error: Unknown parameter\r\n", param);
+            break;
+        }
+        if(result >= 0) event |= REMOTE_PREFS;
+      }
+      break;
+
+    case '?':
+      // List available options for current state
+      {
+        Serial.println("\r\nAvailable options:");
+        Serial.print("Bands: ");
+        for(int i = 0; i < getTotalBands(); i++)
+        {
+          if(i > 0) Serial.print(",");
+          Serial.print(bands[i].bandName);
+        }
+        Serial.printf(" [current: %s]\r\n", getCurrentBand()->bandName);
+
+        Serial.print("Modes: ");
+        bool first = true;
+        for(int i = 0; i < getTotalModes(); i++)
+        {
+          if(isModeValidForBand(i))
+          {
+            if(!first) Serial.print(",");
+            Serial.print(bandModeDesc[i]);
+            first = false;
+          }
+        }
+        Serial.printf(" [current: %s]\r\n", bandModeDesc[currentMode]);
+
+        Serial.print("Steps: ");
+        for(int i = 0; i < getStepsCount(); i++)
+        {
+          if(i > 0) Serial.print(",");
+          Serial.print(getStepDesc(i));
+        }
+        Serial.printf(" [current: %s]\r\n", getCurrentStep()->desc);
+
+        Serial.print("BW: ");
+        for(int i = 0; i < getBandwidthsCount(); i++)
+        {
+          if(i > 0) Serial.print(",");
+          Serial.print(getBandwidthDesc(i));
+        }
+        Serial.printf(" [current: %s]\r\n", getCurrentBandwidth()->desc);
+
+        Serial.printf("AGC: 0-%d [current: %d]\r\n", getMaxAgc(), getCurrentAgc());
+      }
+      break;
+
+    case '^':
+      // Output dropdown rules in compact machine-parseable format
+      // Format: RULES|bands|band_types|mode_rules|step_rules|bw_rules|agc_rules
+      {
+        Serial.print("RULES|");
+
+        // All bands with their types (F=FM, M=MW, S=SW, L=LW)
+        for(int i = 0; i < getTotalBands(); i++)
+        {
+          if(i > 0) Serial.print(",");
+          Serial.print(bands[i].bandName);
+          Serial.print(":");
+          switch(bands[i].bandType)
+          {
+            case FM_BAND_TYPE: Serial.print("F"); break;
+            case MW_BAND_TYPE: Serial.print("M"); break;
+            case SW_BAND_TYPE: Serial.print("S"); break;
+            case LW_BAND_TYPE: Serial.print("L"); break;
+          }
+        }
+
+        // Mode rules: F=FM only, other types=AM,LSB,USB
+        Serial.print("|F:FM;M:AM,LSB,USB;S:AM,LSB,USB;L:AM,LSB,USB");
+
+        // Steps per mode (static lists from Menu.cpp arrays)
+        Serial.print("|FM:10k,50k,100k,200k,1M;SSB:10,25,50,100,500,1k,5k,9k,10k;AM:1k,5k,9k,10k,50k,100k,1M");
+
+        // Bandwidths per mode
+        Serial.print("|FM:Auto,110k,84k,60k,40k;SSB:0.5k,1.0k,1.2k,2.2k,3.0k,4.0k;AM:1.0k,1.8k,2.0k,2.5k,3.0k,4.0k,6.0k");
+
+        // AGC max per mode
+        Serial.print("|FM:27;SSB:1;AM:37");
+
+        Serial.println();
       }
       break;
 

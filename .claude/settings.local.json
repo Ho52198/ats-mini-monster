@@ -26,7 +26,16 @@
       "Bash(git push:*)",
       "Bash(git remote set-url:*)",
       "Bash(cat:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(dir /s /b %LOCALAPPDATA%Temparduinosketches*ats-mini.ino.bin)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(\"$ARDUINO_CLI\" compile --profile esp32s3-ospi --export-binaries \"C:/Users/yavor/Downloads/ats-mini-2.33/ats-mini-2.33/ats-mini\")",
+      "Bash(mode)",
+      "Bash(for:*)",
+      "Bash(do echo \"Attempt $i...\")",
+      "Bash(break)",
+      "Bash(done)"
     ]
   }
 }

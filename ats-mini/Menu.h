@@ -4,7 +4,7 @@
 #include "Common.h"
 
 // Number of memory slots
-#define MEMORY_COUNT  99
+#define MEMORY_COUNT  200
 
 // Band Types
 #define FM_BAND_TYPE  0
@@ -43,7 +43,9 @@
 #define CMD_LOADEIBI  0x2C00 // |
 #define CMD_BLEMODE   0x2D00 // |
 #define CMD_WIFIMODE  0x2E00 // |
-#define CMD_ABOUT     0x2F00 //-+
+#define CMD_ABOUT     0x2F00 // |
+#define CMD_NAMEPRIO  0x3000 // |
+#define CMD_SAVESCAN  0x3100 //-+
 
 // UI Layouts
 #define UI_DEFAULT  0
@@ -96,7 +98,7 @@ static inline bool isMenuMode(uint16_t cmd)
 // These are settings
 static inline bool isSettingsMode(uint16_t cmd)
 {
-  return((cmd>=CMD_SETTINGS) && (cmd<CMD_ABOUT));
+  return((cmd>=CMD_SETTINGS) && (cmd<=CMD_SAVESCAN));
 }
 
 uint8_t seekMode(bool toggle = false);
@@ -123,6 +125,24 @@ const char *getMenuStateName();
 const char *getMenuItemName();
 bool recallMemorySlot(uint8_t slot);
 int tuneToFrequency(uint32_t freq);
+
+// Direct parameter setters (for web/serial interface)
+int setBandByName(const char *name);
+int setModeByName(const char *name);
+int setStepByName(const char *name);
+int setBandwidthByName(const char *name);
+bool setAgcValue(int value);
+
+// Parameter getters for options
+int getStepsCount();
+const char* getStepDesc(int idx);
+int getCurrentStepIdx();
+int getBandwidthsCount();
+const char* getBandwidthDesc(int idx);
+int getCurrentBandwidthIdx();
+int getMaxAgc();
+int getCurrentAgc();
+bool isModeValidForBand(int mode);
 
 void doSoftMute(int16_t enc);
 void doAgc(int16_t enc);

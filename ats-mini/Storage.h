@@ -5,12 +5,13 @@
 
 #define STORAGE_PARTITION "settings"
 
-#define SAVE_SETTINGS 0x01
-#define SAVE_BANDS    0x02
-#define SAVE_MEMORIES 0x04
-#define SAVE_CUR_BAND 0x08
-#define SAVE_VERIFY   0x80
-#define SAVE_ALL      (SAVE_SETTINGS|SAVE_BANDS|SAVE_MEMORIES|SAVE_VERIFY)
+#define SAVE_SETTINGS   0x01
+#define SAVE_BANDS      0x02
+#define SAVE_MEMORIES   0x04
+#define SAVE_CUR_BAND   0x08
+#define SAVE_SCAN       0x10
+#define SAVE_VERIFY     0x80
+#define SAVE_ALL        (SAVE_SETTINGS|SAVE_BANDS|SAVE_MEMORIES|SAVE_VERIFY)
 
 extern Preferences prefs;
 
@@ -28,5 +29,10 @@ void prefsSaveBand(uint8_t idx, bool openPrefs = true);
 bool prefsLoadBand(uint8_t idx, bool openPrefs = true);
 void prefsSaveMemory(uint8_t idx, bool openPrefs = true);
 bool prefsLoadMemory(uint8_t idx, bool openPrefs = true);
+
+// Scan data persistence
+void prefsSaveScan(uint8_t idx);
+bool prefsLoadScan(uint8_t idx);
+void prefsLoadAllScans();
 
 #endif // STORAGE_H

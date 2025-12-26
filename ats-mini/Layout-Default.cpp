@@ -59,7 +59,16 @@ void drawLayoutDefault(const char *statusLine1, const char *statusLine2)
   // Indicate FM pilot detection (stereo indicator)
   drawStereoIndicator(METER_OFFSET_X, METER_OFFSET_Y, (currentMode==FM) && rx.getCurrentPilot());
 
-  if(currentCmd == CMD_SCAN)
+  // Show spectrum if in scan mode or if we have cached scan data for this band
+  bool showSpectrum = (currentCmd == CMD_SCAN);
+  if(!showSpectrum && scanHasDataForBand(bandIdx))
+  {
+    // Load cached data for this band if not already in working buffer
+    scanLoadFromBandCache(bandIdx);
+    showSpectrum = scanIsReady();
+  }
+
+  if(showSpectrum)
   {
     drawScanGraphs(isSSB()? (currentFrequency + currentBFO/1000) : currentFrequency);
   }

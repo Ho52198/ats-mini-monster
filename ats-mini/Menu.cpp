@@ -5,6 +5,7 @@
 #include "Menu.h"
 #include "Draw.h"
 #include "EIBI.h"
+#include "Storage.h"
 
 //
 // Bands Menu
@@ -121,9 +122,11 @@ static const char *menu[] =
 #define MENU_SLEEP        9
 #define MENU_SLEEPMODE    10
 #define MENU_LOADEIBI     11
-#define MENU_BLEMODE      14
+#define MENU_BLEMODE      16
 #define MENU_WIFIMODE     12
 #define MENU_ABOUT        13
+#define MENU_NAMEPRIO     14
+#define MENU_SAVESCAN     15
 
 
 int8_t settingsIdx = MENU_BRIGHTNESS;
@@ -145,6 +148,8 @@ static const char *settings[] =
   //  "Bluetooth",
   "Wi-Fi",
   "About",
+  "Name Priority",
+  "Save Scan",
 };
 
 //
@@ -216,6 +221,7 @@ const char *getMenuItemName()
     case CMD_BLEMODE:   return "Bluetooth";
     case CMD_WIFIMODE:  return "Wi-Fi";
     case CMD_ABOUT:     return "About";
+    case CMD_NAMEPRIO:  return "Name Priority";
     default:            return "";
   }
 }
@@ -256,6 +262,23 @@ static const RDSMode rdsMode[] =
 };
 
 uint8_t getRDSMode() { return(rdsMode[rdsModeIdx].mode); }
+
+//
+// Name Priority Menu
+//
+// Priority order for station name display: Name=Memory name, RDS=FM RDS, EIBI=Shortwave database
+//
+
+uint8_t namePriorityIdx = 0;
+static const char *namePriorityDesc[] =
+{
+  "Name,RDS,EiBi",   // 0: Memory name first, then RDS, then EIBI
+  "Name,EiBi,RDS",   // 1: Memory name first, then EIBI, then RDS
+  "RDS,Name,EiBi",   // 2: RDS first, then memory name, then EIBI
+  "RDS,EiBi,Name",   // 3: RDS first, then EIBI, then memory name
+  "EiBi,Name,RDS",   // 4: EIBI first, then memory name, then RDS
+  "EiBi,RDS,Name",   // 5: EIBI first, then RDS, then memory name
+};
 
 //
 // Sleep Mode Menu
@@ -668,6 +691,11 @@ static void doRDSMode(int16_t enc)
   if(!(getRDSMode() & RDS_CT)) clockReset();
 }
 
+static void doNamePriority(int16_t enc)
+{
+  namePriorityIdx = wrap_range(namePriorityIdx, enc, 0, LAST_ITEM(namePriorityDesc));
+}
+
 static void doUTCOffset(int16_t enc)
 {
   utcOffsetIdx = wrap_range(utcOffsetIdx, enc, 0, LAST_ITEM(utcOffsets));
@@ -913,6 +941,169 @@ void doBandwidth(int16_t enc)
 }
 
 //
+// Direct parameter setters (for web/serial interface)
+//
+
+// Set band by name, returns band index or -1 if not found
+int setBandByName(const char *name)
+{
+  for(int i = 0; i < getTotalBands(); i++)
+  {
+    if(strcmp(bands[i].bandName, name) == 0)
+    {
+      // Save current band settings
+      bands[bandIdx].currentFreq = currentFrequency + currentBFO / 1000;
+      bands[bandIdx].bandMode = currentMode;
+      // Select the new band
+      selectBand(i);
+      return i;
+    }
+  }
+  return -1;
+}
+
+// Set mode by name, returns mode index or -1 if invalid
+int setModeByName(const char *name)
+{
+  // Find mode index
+  int modeIdx = -1;
+  for(int i = 0; i < getTotalModes(); i++)
+  {
+    if(strcmp(bandModeDesc[i], name) == 0)
+    {
+      modeIdx = i;
+      break;
+    }
+  }
+  if(modeIdx < 0) return -1;
+
+  // FM mode only allowed on FM bands
+  if(modeIdx == FM && bands[bandIdx].bandType != FM_BAND_TYPE) return -1;
+  // Non-FM modes not allowed on FM bands
+  if(modeIdx != FM && bands[bandIdx].bandType == FM_BAND_TYPE) return -1;
+
+  // Apply mode change (similar to doMode)
+  bands[bandIdx].currentFreq = currentFrequency + currentBFO / 1000;
+  bands[bandIdx].currentStepIdx = defaultStepIdx[modeIdx];
+  bands[bandIdx].bandwidthIdx = defaultBwIdx[modeIdx];
+  bands[bandIdx].bandMode = modeIdx;
+  selectBand(bandIdx);
+
+  return modeIdx;
+}
+
+// Set step by name, returns step index or -1 if invalid
+int setStepByName(const char *name)
+{
+  int lastStep = getLastStep(currentMode);
+  for(int i = 0; i <= lastStep; i++)
+  {
+    if(strcmp(steps[currentMode][i].desc, name) == 0)
+    {
+      bands[bandIdx].currentStepIdx = i;
+      doStep(0); // Apply the step change
+      return i;
+    }
+  }
+  return -1;
+}
+
+// Set bandwidth by name, returns bandwidth index or -1 if invalid
+int setBandwidthByName(const char *name)
+{
+  int lastBw = getLastBandwidth(currentMode);
+  for(int i = 0; i <= lastBw; i++)
+  {
+    if(strcmp(bandwidths[currentMode][i].desc, name) == 0)
+    {
+      bands[bandIdx].bandwidthIdx = i;
+      setBandwidth();
+      return i;
+    }
+  }
+  return -1;
+}
+
+// Set AGC value directly, returns true if valid
+bool setAgcValue(int value)
+{
+  int maxAgc = currentMode == FM ? 27 : (isSSB() ? 1 : 37);
+  if(value < 0 || value > maxAgc) return false;
+
+  if(currentMode == FM)
+    agcIdx = FmAgcIdx = value;
+  else if(isSSB())
+    agcIdx = SsbAgcIdx = value;
+  else
+    agcIdx = AmAgcIdx = value;
+
+  disableAgc = agcIdx > 0 ? 1 : 0;
+  agcNdx = agcIdx > 1 ? agcIdx - 1 : 0;
+  rx.setAutomaticGainControl(disableAgc, agcNdx);
+
+  return true;
+}
+
+// Get steps count for current mode
+int getStepsCount()
+{
+  return getLastStep(currentMode) + 1;
+}
+
+// Get step description by index for current mode
+const char* getStepDesc(int idx)
+{
+  if(idx < 0 || idx > getLastStep(currentMode)) return NULL;
+  return steps[currentMode][idx].desc;
+}
+
+// Get current step index
+int getCurrentStepIdx()
+{
+  return bands[bandIdx].currentStepIdx;
+}
+
+// Get bandwidths count for current mode
+int getBandwidthsCount()
+{
+  return getLastBandwidth(currentMode) + 1;
+}
+
+// Get bandwidth description by index for current mode
+const char* getBandwidthDesc(int idx)
+{
+  if(idx < 0 || idx > getLastBandwidth(currentMode)) return NULL;
+  return bandwidths[currentMode][idx].desc;
+}
+
+// Get current bandwidth index
+int getCurrentBandwidthIdx()
+{
+  return bands[bandIdx].bandwidthIdx;
+}
+
+// Get max AGC value for current mode
+int getMaxAgc()
+{
+  return currentMode == FM ? 27 : (isSSB() ? 1 : 37);
+}
+
+// Get current AGC value
+int getCurrentAgc()
+{
+  return agcIdx;
+}
+
+// Check if mode is valid for current band
+bool isModeValidForBand(int mode)
+{
+  if(bands[bandIdx].bandType == FM_BAND_TYPE)
+    return mode == FM;
+  else
+    return mode != FM;
+}
+
+//
 // Handle encoder input in menu
 //
 
@@ -996,9 +1187,26 @@ static void clickSettings(int cmd, bool shortPress)
       if(currentMode==FM) currentCmd = CMD_FM_REGION;
       break;
     case MENU_ABOUT:      currentCmd = CMD_ABOUT;     break;
+    case MENU_NAMEPRIO:   currentCmd = CMD_NAMEPRIO;  break;
 
     case MENU_LOADEIBI:
       eibiLoadSchedule();
+      break;
+
+    case MENU_SAVESCAN:
+      // Save current band's scan data to flash
+      if(scanHasDataForBand(bandIdx))
+      {
+        drawMessage("Saving...");
+        prefsSaveScan(bandIdx);
+        drawMessage("Scan Saved!");
+        delay(500);
+      }
+      else
+      {
+        drawMessage("No scan data");
+        delay(500);
+      }
       break;
   }
 }
@@ -1037,6 +1245,7 @@ bool doSideBar(uint16_t cmd, int16_t enc, int16_t enca)
     case CMD_UTCOFFSET: doUTCOffset(scrollDirection * enc);break;
     case CMD_SQUELCH:   doSquelch(enca);break;
     case CMD_ABOUT:     doAbout(enc);break;
+    case CMD_NAMEPRIO:  doNamePriority(scrollDirection * enc);break;
     default:            return(false);
   }
 
@@ -1423,6 +1632,25 @@ static void drawRDSMode(int x, int y, int sx)
   }
 }
 
+static void drawNamePriority(int x, int y, int sx)
+{
+  drawCommon(settings[MENU_NAMEPRIO], x, y, sx, true);
+
+  int count = ITEM_COUNT(namePriorityDesc);
+  for(int i=-2 ; i<3 ; i++)
+  {
+    if(i==0) {
+      drawZoomedMenu(namePriorityDesc[abs((namePriorityIdx+count+i)%count)]);
+      spr.setTextColor(TH.menu_hl_text, TH.menu_hl_bg);
+    } else {
+      spr.setTextColor(TH.menu_item);
+    }
+
+    spr.setTextDatum(MC_DATUM);
+    spr.drawString(namePriorityDesc[abs((namePriorityIdx+count+i)%count)], 40+x+(sx/2), 64+y+(i*16), 2);
+  }
+}
+
 static void drawUTCOffset(int x, int y, int sx)
 {
   drawCommon(settings[MENU_UTCOFFSET], x, y, sx, true);
@@ -1765,6 +1993,7 @@ void drawSideBar(uint16_t cmd, int x, int y, int sx)
     case CMD_SCROLL:    drawScrollDir(x, y, sx); break;
     case CMD_UTCOFFSET: drawUTCOffset(x, y, sx); break;
     case CMD_SQUELCH:   drawSquelch(x, y, sx);   break;
+    case CMD_NAMEPRIO:  drawNamePriority(x, y, sx); break;
     default:            drawInfo(x, y, sx);      break;
   }
 }

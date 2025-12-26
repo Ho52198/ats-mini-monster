@@ -1,0 +1,14 @@
+{
+  "name": "ATS Mini Monster (Full Install)",
+  "version": "2.33+monster",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        { "path": "ats-mini.ino.bootloader.bin", "offset": 0 },
+        { "path": "ats-mini.ino.partitions.bin", "offset": 32768 },
+        { "path": "ats-mini.ino.bin", "offset": 65536 }
+      ]
+    }
+  ]
+}

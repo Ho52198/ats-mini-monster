@@ -224,6 +224,9 @@ void setup()
   // If loading bands fails, save default bands
   if(!prefsLoad(SAVE_BANDS|SAVE_VERIFY)) prefsSave(SAVE_BANDS);
 
+  // Load any saved scan data from flash
+  prefsLoadAllScans();
+
   // Audio Amplifier Enable. G8PTN: Added
   // After the SI4732 has been setup, enable the audio amplifier
   digitalWrite(PIN_AMP_EN, HIGH);
@@ -734,6 +737,9 @@ void loop()
 
   // Periodically print status to serial
   remoteTickTime();
+
+  // Tick async scan if running (for web API spectrum analyzer)
+  scanTickAsync();
 
   // if(encCount && getCpuFrequencyMhz()!=240) setCpuFrequencyMhz(240);
 
