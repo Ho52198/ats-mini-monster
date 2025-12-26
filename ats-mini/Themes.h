@@ -48,6 +48,7 @@ typedef struct __attribute__ ((packed))
   uint16_t menu_item;
   uint16_t menu_hl_bg;
   uint16_t menu_hl_text;
+  uint16_t menu_hl_bg_change;  // Green background for change mode
   uint16_t menu_param;
 
   uint16_t freq_text;

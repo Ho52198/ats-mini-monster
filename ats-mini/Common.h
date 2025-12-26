@@ -78,6 +78,18 @@
 #define BLE_OFF        0 // Bluetooth is disabled
 #define BLE_BLUEFRUIT  1 // Bluefruit Connect app mode
 
+// Info panel menu positions
+#define INFO_POS_MENU     0   // "Menu" item - opens main menu
+#define INFO_POS_VOL      1   // Volume
+#define INFO_POS_SQL      2   // Squelch
+#define INFO_POS_STEP     3   // Step
+#define INFO_POS_BW       4   // Bandwidth
+#define INFO_POS_AGC      5   // AGC
+#define INFO_POS_BAND     6   // Band (extended - above panel)
+#define INFO_POS_MODE     7   // Mode (extended - above panel)
+#define INFO_POS_FREQ     8   // Frequency (extended - main display)
+#define INFO_POS_COUNT    9   // Total positions
+
 //
 // Data Types
 //
@@ -152,6 +164,10 @@ extern bool zoomMenu;
 extern int8_t scrollDirection;
 extern uint8_t utcOffsetIdx;
 extern uint8_t uiLayoutIdx;
+
+// Info panel menu state
+extern uint8_t infoPanelIdx;      // Current cursor position (0-based)
+extern bool infoPanelChangeMode;  // false=selection, true=change mode
 
 extern int8_t FmAgcIdx;
 extern int8_t AmAgcIdx;

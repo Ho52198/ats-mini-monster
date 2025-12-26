@@ -194,6 +194,7 @@ void prefsSave(uint32_t items)
     prefs.putUChar("UILayout",    uiLayoutIdx);    // UI Layout
     prefs.putUChar("BLEMode",     bleModeIdx);     // Bluetooth mode
     prefs.putUChar("NamePrio",    namePriorityIdx); // Name priority
+    prefs.putUChar("InfoPanelIdx", infoPanelIdx);  // Info panel cursor position
 
     // Done with global settings
     prefs.end();
@@ -268,6 +269,10 @@ bool prefsLoad(uint32_t items)
     uiLayoutIdx    = prefs.getUChar("UILayout", uiLayoutIdx);   // UI Layout
     bleModeIdx     = prefs.getUChar("BLEMode", bleModeIdx);     // Bluetooth mode
     namePriorityIdx = prefs.getUChar("NamePrio", namePriorityIdx); // Name priority
+    infoPanelIdx   = prefs.getUChar("InfoPanelIdx", INFO_POS_VOL); // Info panel cursor position
+    // Validate range and always start in selection mode
+    if(infoPanelIdx >= INFO_POS_COUNT) infoPanelIdx = INFO_POS_VOL;
+    infoPanelChangeMode = false;
 
     // Done with global settings
     prefs.end();

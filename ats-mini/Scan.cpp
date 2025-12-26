@@ -26,7 +26,13 @@
 #define SCAN_ERROR  6   // Scan aborted due to error (squelch too low)
 
 // Maximum consecutive signals before aborting (squelch too low)
-#define SPARSE_MAX_CONSECUTIVE 50
+#define SPARSE_MAX_CONSECUTIVE 500
+
+// Auto-squelch constants
+#define AUTO_SQUELCH_CHECK_INTERVAL 10  // Check every N steps
+#define AUTO_SQUELCH_WINDOW         50  // Look at last N points for signal density
+#define AUTO_SQUELCH_THRESHOLD      20  // If >20 signals in window, increase squelch
+#define AUTO_SQUELCH_INCREMENT       2  // Increase squelch by this amount
 
 // Scan data point structure (dense: 2 bytes per point)
 typedef struct
@@ -70,6 +76,7 @@ static uint16_t sparseTotalPoints = 0;  // Total virtual points in full-band sca
 static uint16_t sparseConsecutive = 0;  // Consecutive signals above squelch
 static bool     sparseMode = false;     // True when doing sparse scan
 static uint16_t sparseDisplayStep = 0;  // Effective step for display during sparse scan
+static uint16_t autoSquelchSignals = 0; // Signals in current auto-squelch window
 
 // Shared pool for all cached band data (LRU managed)
 static ScanPoint scanPool[SCAN_POOL_SIZE];
@@ -259,6 +266,7 @@ static bool sparseTickTime()
     storePoint = true;
     isSignal = true;
     sparseConsecutive++;
+    autoSquelchSignals++;
 
     // Check for too many consecutive signals - squelch is too low
     if(sparseConsecutive >= SPARSE_MAX_CONSECUTIVE)
@@ -271,6 +279,20 @@ static bool sparseTickTime()
   {
     // Reset consecutive counter on any below-threshold reading
     sparseConsecutive = 0;
+  }
+
+  // Auto-squelch: every N steps, check signal density and adjust squelch if needed
+  if(sparseCurrentIdx > 0 && sparseCurrentIdx % AUTO_SQUELCH_CHECK_INTERVAL == 0)
+  {
+    if(autoSquelchSignals > AUTO_SQUELCH_THRESHOLD)
+    {
+      // Too many signals in recent window - increase squelch
+      currentSquelch = (currentSquelch + AUTO_SQUELCH_INCREMENT <= 127) ?
+                        currentSquelch + AUTO_SQUELCH_INCREMENT : 127;
+      Serial.printf("Auto-squelch: increased to %d (signals=%d)\n", currentSquelch, autoSquelchSignals);
+    }
+    // Reset window counter for next interval
+    autoSquelchSignals = 0;
   }
 
   // Also store a forced baseline marker if gap is too large
@@ -758,6 +780,7 @@ void scanStartRadio()
     sparseTotalPoints = totalPoints;
     sparseMode = true;
     sparseDisplayStep = 0;
+    autoSquelchSignals = 0;
 
     // Mark as sparse progressive scan running
     scanStatus = SCAN_SPARSE;

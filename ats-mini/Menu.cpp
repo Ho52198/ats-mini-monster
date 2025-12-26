@@ -93,6 +93,10 @@ Band *getCurrentBand() { return(&bands[bandIdx]); }
 
 int8_t menuIdx = MENU_VOLUME;
 
+// Info panel menu state
+uint8_t infoPanelIdx = INFO_POS_VOL;      // Current cursor position (default to Volume)
+bool infoPanelChangeMode = false;          // false=selection, true=change mode
+
 static const char *menu[] =
 {
   "Mode",
@@ -1270,6 +1274,8 @@ bool doSideBar(uint16_t cmd, int16_t enc, int16_t enca)
         if(enca != 0)
         {
           doSquelch(enca);
+          // During sparse scan, don't let squelch go below 1
+          if(scanIsSparse() && currentSquelch < 1) currentSquelch = 1;
           // Don't set squelchTouchTime - we show squelch in scan panel, not separate menu
         }
       }
@@ -1509,15 +1515,15 @@ static void drawScan(int x, int y, int sx)
     sprintf(progressText, "%d%%", progress);
     sprintf(statsText, "%d/%d", current, total);
 
+    // Draw percentage ABOVE progress bar
+    spr.setTextColor(TH.menu_hl_text);
+    spr.drawString(progressText, 40+x+(sx/2), 50+y-30, 2);
+
     // Draw progress bar background
-    spr.fillRect(x + 10, 50+y-20, sx - 20, 10, TH.smeter_bar_empty);
+    spr.fillRect(x + 10, 50+y-15, sx - 20, 10, TH.smeter_bar_empty);
     // Draw progress bar fill
     int fillWidth = ((sx - 20) * progress) / 100;
-    spr.fillRect(x + 10, 50+y-20, fillWidth, 10, TH.menu_param);
-
-    // Draw percentage
-    spr.setTextColor(TH.menu_hl_text);
-    spr.drawString(progressText, 40+x+(sx/2), 50+y, 2);
+    spr.fillRect(x + 10, 50+y-15, fillWidth, 10, TH.menu_param);
 
     // For sparse scan, show step and signals/markers count
     if(scanIsSparse())
@@ -1530,25 +1536,25 @@ static void drawScan(int x, int y, int sx)
       else
         sprintf(stepText, "Step: %dk", userStep);
       spr.setTextColor(TH.menu_item);
-      spr.drawString(stepText, 40+x+(sx/2), 50+y+15, 2);
+      spr.drawString(stepText, 40+x+(sx/2), 50+y+5, 2);
 
       // Show signals count
       uint16_t signals = scanGetSparseSignals();
       char sparseText[16];
       sprintf(sparseText, "Signals: %d", signals);
       spr.setTextColor(TH.scale_text);
-      spr.drawString(sparseText, 40+x+(sx/2), 50+y+30, 2);
+      spr.drawString(sparseText, 40+x+(sx/2), 50+y+20, 2);
 
       // Show squelch value
       char sqlText[16];
       sprintf(sqlText, "Squelch: %d", currentSquelch);
-      spr.drawString(sqlText, 40+x+(sx/2), 50+y+45, 2);
+      spr.drawString(sqlText, 40+x+(sx/2), 50+y+35, 2);
     }
     else
     {
       // Draw points count (current/total)
       spr.setTextColor(TH.scale_text);
-      spr.drawString(statsText, 40+x+(sx/2), 50+y+15, 2);
+      spr.drawString(statsText, 40+x+(sx/2), 50+y+5, 2);
 
       // Draw step info (show optimal scan step)
       uint16_t optStep = scanGetOptimalStep();
@@ -1560,7 +1566,7 @@ static void drawScan(int x, int y, int sx)
       else
         sprintf(stepText, "Step: %dk", optStep);
       spr.setTextColor(TH.menu_item);
-      spr.drawString(stepText, 40+x+(sx/2), 50+y+30, 2);
+      spr.drawString(stepText, 40+x+(sx/2), 50+y+20, 2);
     }
   }
   else
@@ -2038,75 +2044,84 @@ static void drawScrollDir(int x, int y, int sx)
     spr.fillTriangle(39+x+(sx/2)-5, 85+y, 39+x+(sx/2)+5, 85+y, 39+x+(sx/2), 85+y+5, TH.menu_param);
 }
 
+// Helper to get text color for info panel row
+static uint16_t getInfoTextColor(uint8_t pos)
+{
+  if(infoPanelIdx != pos) return TH.box_text;
+  // Selected: use black text in change mode, otherwise menu_hl_text
+  return infoPanelChangeMode ? 0x0000 : TH.menu_hl_text;
+}
+
 static void drawInfo(int x, int y, int sx)
 {
   char text[16];
 
-  // Info box
+  // Info box - 6 rows: Menu, Vol, Sql, Step, BW, AGC
   spr.setTextDatum(ML_DATUM);
   spr.setTextColor(TH.box_text);
   spr.fillSmoothRoundRect(1+x, 1+y, 76+sx, 110, 4, TH.box_border);
   spr.fillSmoothRoundRect(2+x, 2+y, 74+sx, 108, 4, TH.box_bg);
 
-  spr.drawString("Step:", 6+x, 64+y+(-3*16), 2);
-  spr.drawString(getCurrentStep()->desc, 48+x, 64+y+(-3*16), 2);
+  // Row positions: start at 12+y, each row 16px high (only 6 rows in info panel)
+  #define INFO_PANEL_ROWS 6
+  int rowY[INFO_PANEL_ROWS];
+  for(int i = 0; i < INFO_PANEL_ROWS; i++)
+    rowY[i] = 12+y + (i * 16);
 
-  spr.drawString("BW:", 6+x, 64+y+(-2*16), 2);
-  spr.drawString(getCurrentBandwidth()->desc, 48+x, 64+y+(-2*16), 2);
-
-  if(!agcNdx && !agcIdx)
+  // Draw cursor highlight for current position (only if within info panel)
+  if(infoPanelIdx < INFO_PANEL_ROWS)
   {
-    spr.drawString("AGC:", 6+x, 64+y+(-1*16), 2);
-    spr.drawString("On", 48+x, 64+y+(-1*16), 2);
-  }
-  else
-  {
-    sprintf(text, "%2.2d", agcNdx);
-    spr.drawString("Att:", 6+x, 64+y+(-1*16), 2);
-    spr.drawString(text, 48+x, 64+y+(-1*16), 2);
+    uint16_t hlColor = infoPanelChangeMode ? TH.menu_hl_bg_change : TH.menu_hl_bg;
+    spr.fillRoundRect(4+x, rowY[infoPanelIdx]-4, 70+sx, 16, 2, hlColor);
   }
 
-  spr.drawString("Vol:", 6+x, 64+y+(0*16), 2);
+  // Row 0: Menu
+  spr.setTextColor(getInfoTextColor(INFO_POS_MENU));
+  spr.setTextDatum(MC_DATUM);
+  spr.drawString("Menu", 40+x+(sx/2), rowY[INFO_POS_MENU]+4, 2);
+  spr.setTextDatum(ML_DATUM);
+
+  // Row 1: Volume
+  spr.setTextColor(getInfoTextColor(INFO_POS_VOL));
+  spr.drawString("Vol:", 6+x, rowY[INFO_POS_VOL]+4, 2);
   if(muteOn(MUTE_MAIN) || muteOn(MUTE_SQUELCH))
   {
-    spr.setTextColor(TH.box_off_text, TH.box_off_bg);
-    sprintf(text, muteOn(MUTE_MAIN) ? "Muted" : "%d/sq", volume);
-    spr.drawString(text, 48+x, 64+y+(0*16), 2);
-    spr.setTextColor(TH.box_text);
+    sprintf(text, muteOn(MUTE_MAIN) ? "Mute" : "%d/sq", volume);
   }
   else
   {
-    spr.setTextColor(TH.box_text);
-    spr.drawNumber(volume, 48+x, 64+y+(0*16), 2);
+    sprintf(text, "%d", volume);
   }
+  spr.drawString(text, 42+x, rowY[INFO_POS_VOL]+4, 2);
 
-  // Draw RDS PI code, if present
-  uint16_t piCode = getRdsPiCode();
-  if(piCode && currentMode == FM)
+  // Row 2: Squelch
+  spr.setTextColor(getInfoTextColor(INFO_POS_SQL));
+  spr.drawString("Sql:", 6+x, rowY[INFO_POS_SQL]+4, 2);
+  sprintf(text, "%d", currentSquelch);
+  spr.drawString(text, 42+x, rowY[INFO_POS_SQL]+4, 2);
+
+  // Row 3: Step
+  spr.setTextColor(getInfoTextColor(INFO_POS_STEP));
+  spr.drawString("Step:", 6+x, rowY[INFO_POS_STEP]+4, 2);
+  spr.drawString(getCurrentStep()->desc, 42+x, rowY[INFO_POS_STEP]+4, 2);
+
+  // Row 4: Bandwidth
+  spr.setTextColor(getInfoTextColor(INFO_POS_BW));
+  spr.drawString("BW:", 6+x, rowY[INFO_POS_BW]+4, 2);
+  spr.drawString(getCurrentBandwidth()->desc, 42+x, rowY[INFO_POS_BW]+4, 2);
+
+  // Row 5: AGC
+  spr.setTextColor(getInfoTextColor(INFO_POS_AGC));
+  if(!agcNdx && !agcIdx)
   {
-    sprintf(text, "%04X", piCode);
-    spr.drawString("PI:", 6+x, 64+y + (1*16), 2);
-    spr.drawString(text, 48+x, 64+y + (1*16), 2);
+    spr.drawString("AGC:", 6+x, rowY[INFO_POS_AGC]+4, 2);
+    spr.drawString("On", 42+x, rowY[INFO_POS_AGC]+4, 2);
   }
   else
   {
-    spr.drawString("AVC:", 6+x, 64+y + (1*16), 2);
-
-    if(currentMode==FM)
-      sprintf(text, "n/a");
-    else if(isSSB())
-      sprintf(text, "%2.2ddB", SsbAvcIdx);
-    else
-      sprintf(text, "%2.2ddB", AmAvcIdx);
-
-    spr.drawString(text, 48+x, 64+y + (1*16), 2);
-  }
-
-  // Draw current time
-  if(clockGet())
-  {
-    spr.drawString("Time:", 6+x, 64+y+(2*16), 2);
-    spr.drawString(clockGet(), 48+x, 64+y+(2*16), 2);
+    sprintf(text, "%d", agcNdx);
+    spr.drawString("Att:", 6+x, rowY[INFO_POS_AGC]+4, 2);
+    spr.drawString(text, 42+x, rowY[INFO_POS_AGC]+4, 2);
   }
 }
 

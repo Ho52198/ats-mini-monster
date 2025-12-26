@@ -21,6 +21,28 @@ void drawLayoutDefault(const char *statusLine1, const char *statusLine2)
   // Set font we are going to use
   spr.setFreeFont(&Orbitron_Light_24);
 
+  // Draw extended position highlights (when in info panel navigation mode)
+  if(currentCmd == CMD_NONE)
+  {
+    uint16_t hlColor = infoPanelChangeMode ? TH.menu_hl_bg_change : TH.menu_hl_bg;
+
+    // Highlight band name when selected
+    if(infoPanelIdx == INFO_POS_BAND)
+    {
+      spr.fillRoundRect(BAND_OFFSET_X - 35, BAND_OFFSET_Y - 2, 70, 28, 3, hlColor);
+    }
+    // Highlight mode when selected
+    if(infoPanelIdx == INFO_POS_MODE)
+    {
+      spr.fillRoundRect(BAND_OFFSET_X + 22, BAND_OFFSET_Y + 5, 50, 20, 3, hlColor);
+    }
+    // Highlight frequency when selected
+    if(infoPanelIdx == INFO_POS_FREQ)
+    {
+      spr.fillRoundRect(FREQ_OFFSET_X - 145, FREQ_OFFSET_Y - 30, 160, 36, 3, hlColor);
+    }
+  }
+
   // Draw band and mode
   drawBandAndMode(
     getCurrentBand()->bandName,

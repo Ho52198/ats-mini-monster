@@ -815,10 +815,57 @@ void loop()
       switch(currentCmd)
       {
         case CMD_NONE:
-          // Tuning
-          needRedraw |= doTune(encCountAccel);
-          // Current frequency may have changed
-          prefsRequestSave(SAVE_CUR_BAND);
+          // Info panel navigation
+          if(!infoPanelChangeMode)
+          {
+            // Selection mode: move cursor up/down with wrap
+            infoPanelIdx = (infoPanelIdx + INFO_POS_COUNT + (encCount > 0 ? 1 : -1)) % INFO_POS_COUNT;
+            needRedraw = true;
+          }
+          else
+          {
+            // Change mode: modify the selected parameter
+            switch(infoPanelIdx)
+            {
+              case INFO_POS_VOL:
+                doVolume(encCountAccel);
+                needRedraw = true;
+                break;
+              case INFO_POS_SQL:
+                doSquelch(encCountAccel);
+                needRedraw = true;
+                break;
+              case INFO_POS_STEP:
+                doStep(encCount);
+                needRedraw = true;
+                break;
+              case INFO_POS_BW:
+                doBandwidth(encCount);
+                needRedraw = true;
+                break;
+              case INFO_POS_AGC:
+                doAgc(encCount);
+                needRedraw = true;
+                break;
+              case INFO_POS_BAND:
+                doBand(encCount);
+                needRedraw = true;
+                prefsRequestSave(SAVE_CUR_BAND);
+                break;
+              case INFO_POS_MODE:
+                doMode(encCount);
+                needRedraw = true;
+                prefsRequestSave(SAVE_CUR_BAND);
+                break;
+              case INFO_POS_FREQ:
+                needRedraw |= doTune(encCountAccel);
+                prefsRequestSave(SAVE_CUR_BAND);
+                break;
+              default:
+                // Menu position shouldn't be in change mode
+                break;
+            }
+          }
           break;
         case CMD_SCAN:
           // Block tuning while scan is running to prevent cancellation
@@ -906,19 +953,25 @@ void loop()
       {
         // Deactivate modal mode
         currentCmd = CMD_NONE;
-        needRedraw = true;
-      }
-      else if(pb1st.wasShortPressed)
-      {
-        // Volume shortcut (only active in VFO mode)
-        currentCmd = CMD_VOLUME;
+        // Reset to selection mode when returning to VFO
+        infoPanelChangeMode = false;
         needRedraw = true;
       }
       else
       {
-        // Activate menu
-        currentCmd = CMD_MENU;
-        needRedraw = true;
+        // Info panel click handling
+        if(infoPanelIdx == INFO_POS_MENU)
+        {
+          // Click on Menu: open the main menu
+          currentCmd = CMD_MENU;
+          needRedraw = true;
+        }
+        else
+        {
+          // Toggle between selection and change mode
+          infoPanelChangeMode = !infoPanelChangeMode;
+          needRedraw = true;
+        }
       }
     }
   }

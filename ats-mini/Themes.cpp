@@ -38,6 +38,7 @@ ColorTheme theme[] =
     0xBEDF, // menu_item
     0x105B, // menu_hl_bg
     0xBEDF, // menu_hl_text
+    0x07E0, // menu_hl_bg_change (green for change mode)
     0xBEDF, // menu_param
     0xFFFF, // freq_text
     0xD69A, // funit_text
@@ -86,6 +87,7 @@ ColorTheme theme[] =
     0xBEDF, // menu_item
     0xD69A, // menu_hl_bg
     0x2293, // menu_hl_text
+    0x07E0, // menu_hl_bg_change (green for change mode)
     0xBEDF, // menu_param
     0xFFFF, // freq_text
     0xD69A, // funit_text
@@ -134,6 +136,7 @@ ColorTheme theme[] =
     0x3A08, // menu_item
     0x3A08, // menu_hl_bg
     0xC616, // menu_hl_text
+    0x632C, // menu_hl_bg_change (gray-green for change mode)
     0x3A08, // menu_param
     0x3A08, // freq_text
     0x632C, // funit_text
@@ -182,6 +185,7 @@ ColorTheme theme[] =
     0x00C2, // menu_item
     0x00C2, // menu_hl_bg
     0x4309, // menu_hl_text
+    0x1165, // menu_hl_bg_change (muted green for change mode)
     0x00C2, // menu_param
     0x00C2, // freq_text
     0x1165, // funit_text
@@ -230,6 +234,7 @@ ColorTheme theme[] =
     0x2945, // menu_item
     0x2945, // menu_hl_bg
     0xF3C1, // menu_hl_text
+    0x4208, // menu_hl_bg_change (green for change mode)
     0x2945, // menu_param
     0x18C3, // freq_text
     0x2945, // funit_text
@@ -278,6 +283,7 @@ ColorTheme theme[] =
     0xF800, // menu_item
     0xD986, // menu_hl_bg
     0x0000, // menu_hl_text
+    0x8925, // menu_hl_bg_change (amber-green for change mode)
     0xD986, // menu_param
     0xD986, // freq_text
     0xB925, // funit_text
@@ -326,6 +332,7 @@ ColorTheme theme[] =
     0x052D, // menu_item
     0x0309, // menu_hl_bg
     0x07AD, // menu_hl_text
+    0x052D, // menu_hl_bg_change (brighter green for change mode)
     0x07AD, // menu_param
     0x07AD, // freq_text
     0x052D, // funit_text
@@ -374,6 +381,7 @@ ColorTheme theme[] =
     0xBEDF, // menu_item
     0x105B, // menu_hl_bg
     0xBEDF, // menu_hl_text
+    0x07E0, // menu_hl_bg_change (green for change mode)
     0xBEDF, // menu_param
     0x3FE0, // freq_text
     0xD69A, // funit_text
@@ -422,6 +430,7 @@ ColorTheme theme[] =
     0xBEDF, // menu_item
     0x5005, // menu_hl_bg
     0xBEDF, // menu_hl_text
+    0x07E0, // menu_hl_bg_change (green for change mode)
     0xBEDF, // menu_param
     0xFFFF, // freq_text
     0xC638, // funit_text
