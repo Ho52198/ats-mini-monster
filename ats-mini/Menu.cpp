@@ -7,6 +7,10 @@
 #include "EIBI.h"
 #include "Storage.h"
 
+// Squelch touch timer for auto-hide during scan (2 second timeout)
+#define SQUELCH_DISPLAY_TIMEOUT 2000
+static uint32_t squelchTouchTime = 0;
+
 //
 // Bands Menu
 //
@@ -591,14 +595,27 @@ static void clickScan(bool shortPress)
 {
   if(shortPress)
   {
-    // Clear stale parameters
-    clearStationInfo();
-    rssi = snr = 0;
-    drawScreen();
-    drawMessage("Scanning...");
-    scanRun(currentFrequency, 10);
+    // If scan is already running, stop it
+    if(scanIsRadioRunning())
+    {
+      scanStopRadio();
+    }
+    else
+    {
+      // Clear stale parameters
+      clearStationInfo();
+      rssi = snr = 0;
+      // Start non-blocking progressive scan
+      scanStartRadio();
+    }
   }
-  else currentCmd = CMD_NONE;
+  else
+  {
+    // Long press exits scan mode
+    if(scanIsRadioRunning())
+      scanStopRadio();
+    currentCmd = CMD_NONE;
+  }
 }
 
 static void doTheme(int16_t enc)
@@ -1246,6 +1263,17 @@ bool doSideBar(uint16_t cmd, int16_t enc, int16_t enca)
     case CMD_SQUELCH:   doSquelch(enca);break;
     case CMD_ABOUT:     doAbout(enc);break;
     case CMD_NAMEPRIO:  doNamePriority(scrollDirection * enc);break;
+    // During ALL band scan (or when squelch needed), encoder controls squelch directly
+    case CMD_SCAN:
+      if(scanIsSparse() || scanNeedsSquelch())
+      {
+        if(enca != 0)
+        {
+          doSquelch(enca);
+          // Don't set squelchTouchTime - we show squelch in scan panel, not separate menu
+        }
+      }
+      break;
     default:            return(false);
   }
 
@@ -1320,6 +1348,7 @@ static void drawCommon(const char *title, int x, int y, int sx, bool cursor = fa
 {
   spr.setTextDatum(MC_DATUM);
 
+  // Draw standard menu panel (original y-relative positioning)
   spr.setTextColor(TH.menu_hdr);
   spr.fillSmoothRoundRect(1+x, 1+y, 76+sx, 110, 4, TH.menu_border);
   spr.fillSmoothRoundRect(2+x, 2+y, 74+sx, 108, 4, TH.menu_bg);
@@ -1337,19 +1366,21 @@ static void drawMenu(int x, int y, int sx)
 {
   spr.setTextDatum(MC_DATUM);
 
-  spr.fillSmoothRoundRect(1+x, 1+y, 76+sx, 110, 4, TH.menu_border);
-  spr.fillSmoothRoundRect(2+x, 2+y, 74+sx, 108, 4, TH.menu_bg);
+  // Draw extended menu panel from y=1 (top of screen) to cover header and other elements
+  spr.fillSmoothRoundRect(1+x, 1, 76+sx, 169, 4, TH.menu_border);
+  spr.fillSmoothRoundRect(2+x, 2, 74+sx, 167, 4, TH.menu_bg);
   spr.setTextColor(TH.menu_hdr);
 
-  spr.drawString("Menu", 40+x+(sx/2), 12+y, 2);
-  spr.drawLine(1+x, 23+y, 76+sx, 23+y, TH.menu_border);
+  // Header and divider at fixed positions (not y-relative) to maximize item space
+  spr.drawString("Menu", 40+x+(sx/2), 10, 2);
+  spr.drawLine(1+x, 18, 76+sx, 18, TH.menu_border);
 
   spr.setTextFont(0);
   spr.setTextColor(TH.menu_item);
-  spr.fillRoundRect(6+x, 24+y+(2*16), 66+sx, 16, 2, TH.menu_hl_bg);
+  spr.fillRoundRect(6+x, 80, 66+sx, 16, 2, TH.menu_hl_bg);
 
   int count = ITEM_COUNT(menu);
-  for(int i=-2 ; i<3 ; i++)
+  for(int i=-4 ; i<5 ; i++)
   {
     if(i==0) {
       drawZoomedMenu(menu[abs((menuIdx+count+i)%count)]);
@@ -1358,7 +1389,7 @@ static void drawMenu(int x, int y, int sx)
       spr.setTextColor(TH.menu_item);
     }
     spr.setTextDatum(MC_DATUM);
-    spr.drawString(menu[abs((menuIdx+count+i)%count)], 40+x+(sx/2), 64+y+(i*16), 2);
+    spr.drawString(menu[abs((menuIdx+count+i)%count)], 40+x+(sx/2), 88+(i*16), 2);
   }
 }
 
@@ -1366,18 +1397,21 @@ static void drawSettings(int x, int y, int sx)
 {
   spr.setTextDatum(MC_DATUM);
 
-  spr.fillSmoothRoundRect(1+x, 1+y, 76+sx, 110, 4, TH.menu_border);
-  spr.fillSmoothRoundRect(2+x, 2+y, 74+sx, 108, 4, TH.menu_bg);
+  // Draw extended menu panel from y=1 (top of screen) to cover header and other elements
+  spr.fillSmoothRoundRect(1+x, 1, 76+sx, 169, 4, TH.menu_border);
+  spr.fillSmoothRoundRect(2+x, 2, 74+sx, 167, 4, TH.menu_bg);
   spr.setTextColor(TH.menu_hdr);
-  spr.drawString("Settings", 40+x+(sx/2), 12+y, 2);
-  spr.drawLine(1+x, 23+y, 76+sx, 23+y, TH.menu_border);
+
+  // Header and divider at fixed positions (not y-relative) to maximize item space
+  spr.drawString("Settings", 40+x+(sx/2), 10, 2);
+  spr.drawLine(1+x, 18, 76+sx, 18, TH.menu_border);
 
   spr.setTextFont(0);
   spr.setTextColor(TH.menu_item);
-  spr.fillRoundRect(6+x, 24+y+(2*16), 66+sx, 16, 2, TH.menu_hl_bg);
+  spr.fillRoundRect(6+x, 80, 66+sx, 16, 2, TH.menu_hl_bg);
 
   int count = ITEM_COUNT(settings);
-  for(int i=-2 ; i<3 ; i++)
+  for(int i=-4 ; i<5 ; i++)
   {
     if(i==0) {
       drawZoomedMenu(settings[abs((settingsIdx+count+i)%count)]);
@@ -1387,7 +1421,7 @@ static void drawSettings(int x, int y, int sx)
     }
 
     spr.setTextDatum(MC_DATUM);
-    spr.drawString(settings[abs((settingsIdx+count+i)%count)], 40+x+(sx/2), 64+y+(i*16), 2);
+    spr.drawString(settings[abs((settingsIdx+count+i)%count)], 40+x+(sx/2), 88+(i*16), 2);
   }
 }
 
@@ -1452,20 +1486,139 @@ static void drawScan(int x, int y, int sx)
 {
   drawCommon(menu[MENU_SCAN], x, y, sx);
   spr.setTextDatum(MC_DATUM);
-  spr.setTextColor(TH.scan_rssi);
-  spr.drawString("S", 40+x+(sx/2)-30, 66+y+30, 2);
-  spr.setTextColor(TH.scan_snr);
-  spr.drawString("N", 40+x+(sx/2)+30, 66+y+30, 2);
 
-  spr.drawSmoothArc(40+x+(sx/2), 66+y, 30, 27, 45, 180, TH.menu_param, TH.menu_bg);
-  spr.fillTriangle(40+x+(sx/2)-5, 66+y-32, 40+x+(sx/2)+5, 66+y-27, 40+x+(sx/2)-5, 66+y-22, TH.menu_param);
-  spr.drawSmoothArc(40+x+(sx/2), 66+y, 30, 27, 225, 360, TH.menu_param, TH.menu_bg);
-  spr.fillTriangle(40+x+(sx/2)+5, 66+y+32, 40+x+(sx/2)-5, 66+y+27, 40+x+(sx/2)+5, 66+y+22, TH.menu_param);
+  // Check if scan aborted with error
+  if(scanHasError())
+  {
+    spr.setTextColor(TH.text_warn);
+    spr.drawString("Squelch too low!", 40+x+(sx/2), 50+y-10, 2);
+    spr.setTextColor(TH.menu_item);
+    spr.drawString("Increase squelch", 40+x+(sx/2), 50+y+10, 2);
+    spr.drawString("and try again", 40+x+(sx/2), 50+y+25, 2);
+    return;
+  }
 
-  spr.drawLine(40+x+(sx/2)-17, 66+y+5, 40+x+(sx/2)-4, 66+y+5, TH.menu_param);
-  spr.drawLine(40+x+(sx/2)-4, 66+y+5, 40+x+(sx/2), 66+y-16+5, TH.menu_param);
-  spr.drawLine(40+x+(sx/2), 66+y-16+5, 40+x+(sx/2)+4, 66+y+5, TH.menu_param);
-  spr.drawLine(40+x+(sx/2)+4, 66+y+5, 40+x+(sx/2)+17, 66+y+5, TH.menu_param);
+  // Show progress if scan is running
+  if(scanIsRadioRunning())
+  {
+    uint8_t progress = scanGetProgress();
+    uint16_t current = scanGetCount();
+    uint16_t total = scanGetMaxPoints();
+    char progressText[24];
+    char statsText[24];
+    sprintf(progressText, "%d%%", progress);
+    sprintf(statsText, "%d/%d", current, total);
+
+    // Draw progress bar background
+    spr.fillRect(x + 10, 50+y-20, sx - 20, 10, TH.smeter_bar_empty);
+    // Draw progress bar fill
+    int fillWidth = ((sx - 20) * progress) / 100;
+    spr.fillRect(x + 10, 50+y-20, fillWidth, 10, TH.menu_param);
+
+    // Draw percentage
+    spr.setTextColor(TH.menu_hl_text);
+    spr.drawString(progressText, 40+x+(sx/2), 50+y, 2);
+
+    // For sparse scan, show step and signals/markers count
+    if(scanIsSparse())
+    {
+      // Show user's selected step
+      char stepText[16];
+      uint16_t userStep = getCurrentStep()->step;
+      if(userStep >= 1000)
+        sprintf(stepText, "Step: %dM", userStep / 1000);
+      else
+        sprintf(stepText, "Step: %dk", userStep);
+      spr.setTextColor(TH.menu_item);
+      spr.drawString(stepText, 40+x+(sx/2), 50+y+15, 2);
+
+      // Show signals count
+      uint16_t signals = scanGetSparseSignals();
+      char sparseText[16];
+      sprintf(sparseText, "Signals: %d", signals);
+      spr.setTextColor(TH.scale_text);
+      spr.drawString(sparseText, 40+x+(sx/2), 50+y+30, 2);
+
+      // Show squelch value
+      char sqlText[16];
+      sprintf(sqlText, "Squelch: %d", currentSquelch);
+      spr.drawString(sqlText, 40+x+(sx/2), 50+y+45, 2);
+    }
+    else
+    {
+      // Draw points count (current/total)
+      spr.setTextColor(TH.scale_text);
+      spr.drawString(statsText, 40+x+(sx/2), 50+y+15, 2);
+
+      // Draw step info (show optimal scan step)
+      uint16_t optStep = scanGetOptimalStep();
+      char stepText[16];
+      if(currentMode == FM)
+        sprintf(stepText, "Step: %dk", optStep * 10);  // FM step is in 10kHz units
+      else if(optStep >= 1000)
+        sprintf(stepText, "Step: %dM", optStep / 1000);
+      else
+        sprintf(stepText, "Step: %dk", optStep);
+      spr.setTextColor(TH.menu_item);
+      spr.drawString(stepText, 40+x+(sx/2), 50+y+30, 2);
+    }
+  }
+  else
+  {
+    // Not scanning - show instructions or current state
+
+    // For ALL band without squelch, show warning
+    if(scanNeedsSquelch())
+    {
+      spr.setTextColor(TH.text_warn);
+      spr.drawString("Set Squelch first!", 40+x+(sx/2), 50+y-10, 2);
+      spr.setTextColor(TH.menu_item);
+      spr.drawString("ALL band requires", 40+x+(sx/2), 50+y+10, 2);
+      spr.drawString("squelch for scan", 40+x+(sx/2), 50+y+25, 2);
+      return;
+    }
+
+    // Show scan step for this band
+    // For ALL band (with squelch), show user's selected step; otherwise optimal step
+    char stepText[16];
+    if(bandIdx == ALL_BAND_INDEX && currentSquelch > 0)
+    {
+      // ALL band uses user's selected step
+      uint16_t userStep = getCurrentStep()->step;
+      if(userStep >= 1000)
+        sprintf(stepText, "Step: %dM", userStep / 1000);
+      else
+        sprintf(stepText, "Step: %dk", userStep);
+    }
+    else
+    {
+      // Other bands use optimal calculated step
+      uint16_t optStep = scanGetOptimalStep();
+      if(currentMode == FM)
+        sprintf(stepText, "Step: %dk", optStep * 10);  // FM step is in 10kHz units
+      else if(optStep >= 1000)
+        sprintf(stepText, "Step: %dM", optStep / 1000);
+      else
+        sprintf(stepText, "Step: %dk", optStep);
+    }
+    spr.setTextColor(TH.menu_item);
+    spr.drawString(stepText, 40+x+(sx/2), 50+y-25, 2);
+
+    spr.setTextColor(TH.scan_rssi);
+    spr.drawString("S", 40+x+(sx/2)-30, 50+y+30, 2);
+    spr.setTextColor(TH.scan_snr);
+    spr.drawString("N", 40+x+(sx/2)+30, 50+y+30, 2);
+
+    spr.drawSmoothArc(40+x+(sx/2), 50+y, 30, 27, 45, 180, TH.menu_param, TH.menu_bg);
+    spr.fillTriangle(40+x+(sx/2)-5, 50+y-32, 40+x+(sx/2)+5, 50+y-27, 40+x+(sx/2)-5, 50+y-22, TH.menu_param);
+    spr.drawSmoothArc(40+x+(sx/2), 50+y, 30, 27, 225, 360, TH.menu_param, TH.menu_bg);
+    spr.fillTriangle(40+x+(sx/2)+5, 50+y+32, 40+x+(sx/2)-5, 50+y+27, 40+x+(sx/2)+5, 50+y+22, TH.menu_param);
+
+    spr.drawLine(40+x+(sx/2)-17, 50+y+5, 40+x+(sx/2)-4, 50+y+5, TH.menu_param);
+    spr.drawLine(40+x+(sx/2)-4, 50+y+5, 40+x+(sx/2), 50+y-16+5, TH.menu_param);
+    spr.drawLine(40+x+(sx/2), 50+y-16+5, 40+x+(sx/2)+4, 50+y+5, TH.menu_param);
+    spr.drawLine(40+x+(sx/2)+4, 50+y+5, 40+x+(sx/2)+17, 50+y+5, TH.menu_param);
+  }
 }
 
 static void drawBand(int x, int y, int sx)
@@ -1971,7 +2124,10 @@ void drawSideBar(uint16_t cmd, int x, int y, int sx)
     case CMD_MODE:      drawMode(x, y, sx);      break;
     case CMD_STEP:      drawStep(x, y, sx);      break;
     case CMD_SEEK:      drawSeek(x, y, sx);      break;
-    case CMD_SCAN:      drawScan(x, y, sx);      break;
+    // Scan panel always shows drawScan (squelch value is displayed within the scan panel)
+    case CMD_SCAN:
+      drawScan(x, y, sx);
+      break;
     case CMD_BAND:      drawBand(x, y, sx);      break;
     case CMD_BANDWIDTH: drawBandwidth(x, y, sx); break;
     case CMD_THEME:     drawTheme(x, y, sx);     break;

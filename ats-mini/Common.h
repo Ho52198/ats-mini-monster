@@ -15,7 +15,7 @@
 #define AUTHORS_LINE4  "Marat Fayzullin"
 
 #define VER_APP        233  // Firmware version (upstream)
-#define VER_FORK       "monster.0.2"  // Fork version suffix
+#define VER_FORK       "monster.0.4"  // Fork version suffix
 #define VER_SETTINGS   72   // Settings version
 #define VER_MEMORIES   72   // Memories version
 #define VER_BANDS      72   // Bands version
@@ -204,6 +204,22 @@ void scanSaveToBandCache(uint8_t bandIndex);
 bool scanLoadFromBandCache(uint8_t bandIndex);
 bool scanHasDataForBand(uint8_t bandIndex);
 void scanInvalidateBandCache(uint8_t bandIndex);
+
+// Progressive radio scan functions
+void scanStartRadio();
+bool scanTickRadio();
+void scanStopRadio();
+bool scanIsRadioRunning();
+uint8_t scanGetProgress();
+uint16_t scanGetMaxPoints();
+uint16_t scanGetOptimalStep();
+uint16_t scanGetCurrentFreq();
+bool scanNeedsSquelch();
+bool scanIsSparse();
+bool scanHasError();
+uint16_t scanGetSparseSignals();
+uint16_t scanGetSparseMarkers();
+uint16_t scanGetSparseCount();
 
 // Station.c
 const char *getStationName();

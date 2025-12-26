@@ -182,8 +182,9 @@ void drawLayoutSmeter(const char *statusLine1, const char *statusLine2)
   }
 
   // Draw frequency, units, and optionally highlight a digit
+  // During scanning, show the current scan position
   drawFrequency(
-    currentFrequency,
+    scanIsRadioRunning() ? scanGetCurrentFreq() : currentFrequency,
     FREQ_OFFSET_X, FREQ_OFFSET_Y,
     FUNIT_OFFSET_X, FUNIT_OFFSET_Y,
     currentCmd == CMD_FREQ ? getFreqInputPos() + (pushAndRotate ? 0x80 : 0) : 100
@@ -198,15 +199,11 @@ void drawLayoutSmeter(const char *statusLine1, const char *statusLine2)
   // Draw band scale
   drawSmallScale(isSSB()? (currentFrequency + currentBFO/1000) : currentFrequency, 120);
 
-  // Draw left-side menu/info bar
-  // @@@ FIXME: Frequency display (above) intersects the side bar!
-  drawSideBar(currentCmd, ALT_MENU_OFFSET_X, ALT_MENU_OFFSET_Y, MENU_DELTA_X);
-
   // Indicate FM pilot detection (stereo indicator)
   drawAltStereoIndicator(ALT_STEREO_OFFSET_X, ALT_STEREO_OFFSET_Y, (currentMode==FM) && rx.getCurrentPilot());
 
-  // Show spectrum if in scan mode or if we have cached scan data for this band
-  bool showSpectrum = (currentCmd == CMD_SCAN);
+  // Show spectrum if in scan mode (including while scanning) or if we have cached scan data
+  bool showSpectrum = (currentCmd == CMD_SCAN) && (scanIsReady() || scanIsRadioRunning());
   if(!showSpectrum && scanHasDataForBand(bandIdx))
   {
     // Load cached data for this band if not already in working buffer
@@ -216,7 +213,11 @@ void drawLayoutSmeter(const char *statusLine1, const char *statusLine2)
 
   if(showSpectrum)
   {
-    drawScanGraphs(isSSB()? (currentFrequency + currentBFO/1000) : currentFrequency);
+    // During active scan, follow the scan position; otherwise center on current frequency
+    uint16_t displayFreq = scanIsRadioRunning() ? scanGetCurrentFreq() :
+                           (isSSB() ? (currentFrequency + currentBFO/1000) : currentFrequency);
+    if(displayFreq == 0) displayFreq = currentFrequency;  // Fallback at scan start
+    drawScanGraphs(displayFreq);
   }
   else if(!drawWiFiStatus(statusLine1, statusLine2, STATUS_OFFSET_X, STATUS_OFFSET_Y))
   {
@@ -231,4 +232,7 @@ void drawLayoutSmeter(const char *statusLine1, const char *statusLine2)
       drawLargeSMeter(rssi, getInterpolatedStrength(rssi), ALT_METER_OFFSET_X, ALT_METER_OFFSET_Y);
     }
   }
+
+  // Draw left-side menu/info bar LAST so it's on top of other elements
+  drawSideBar(currentCmd, ALT_MENU_OFFSET_X, ALT_MENU_OFFSET_Y, MENU_DELTA_X);
 }

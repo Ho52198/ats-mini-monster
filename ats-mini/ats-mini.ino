@@ -310,8 +310,8 @@ ICACHE_RAM_ATTR void rotaryEncoder()
       encoderCountAccel += accelDelta;
     }
 
-    // Reset the seek flag
-    seekStop = true;
+    // Reset the seek flag (but not during scans - only button click should stop scan)
+    if(!scanIsRadioRunning()) seekStop = true;
   }
 }
 
@@ -741,6 +741,10 @@ void loop()
   // Tick async scan if running (for web API spectrum analyzer)
   scanTickAsync();
 
+  // Tick progressive radio scan if running (for radio display)
+  if(scanTickRadio())
+    needRedraw = true;
+
   // if(encCount && getCpuFrequencyMhz()!=240) setCpuFrequencyMhz(240);
 
   // Receive and execute serial command
@@ -787,6 +791,17 @@ void loop()
           // Current frequency may have changed
           prefsRequestSave(SAVE_CUR_BAND);
           break;
+        case CMD_MENU:
+          // Push-and-rotate in menu: switch to volume mode
+          currentCmd = CMD_VOLUME;
+          needRedraw |= doSideBar(CMD_VOLUME, encCount, encCountAccel);
+          prefsRequestSave(SAVE_ALL);
+          break;
+        case CMD_VOLUME:
+          // Continue adjusting volume while holding
+          needRedraw |= doSideBar(CMD_VOLUME, encCount, encCountAccel);
+          prefsRequestSave(SAVE_ALL);
+          break;
       }
     }
     // Reset timeouts while push and rotate is active
@@ -800,11 +815,24 @@ void loop()
       switch(currentCmd)
       {
         case CMD_NONE:
-        case CMD_SCAN:
           // Tuning
           needRedraw |= doTune(encCountAccel);
           // Current frequency may have changed
           prefsRequestSave(SAVE_CUR_BAND);
+          break;
+        case CMD_SCAN:
+          // Block tuning while scan is running to prevent cancellation
+          if(!scanIsRadioRunning())
+          {
+            needRedraw |= doTune(encCountAccel);
+            prefsRequestSave(SAVE_CUR_BAND);
+          }
+          else
+          {
+            // During active scan, allow squelch adjustment via doSideBar
+            needRedraw |= doSideBar(currentCmd, encCount, encCountAccel);
+          }
+          needRedraw = true;
           break;
         case CMD_FREQ:
           // Digit tuning
@@ -899,6 +927,9 @@ void loop()
   if(!pb1st.isPressed && pushAndRotate)
   {
     pushAndRotate = false;
+    // If we were adjusting volume via push-rotate, return to VFO
+    if(currentCmd == CMD_VOLUME)
+      currentCmd = CMD_NONE;
     needRedraw = true;
   }
 

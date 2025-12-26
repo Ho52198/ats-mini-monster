@@ -12,6 +12,9 @@
 #define SW_BAND_TYPE  2
 #define LW_BAND_TYPE  3
 
+// Special band indices
+#define ALL_BAND_INDEX  1  // ALL band (150-30000 kHz) is at index 1
+
 // Commands
 #define CMD_NONE      0x0000
 #define CMD_FREQ      0x0100

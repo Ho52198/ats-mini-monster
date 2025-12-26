@@ -3,7 +3,7 @@
 
 // Display position control
 #define MENU_OFFSET_X    0    // Menu horizontal offset
-#define MENU_OFFSET_Y   18    // Menu vertical offset
+#define MENU_OFFSET_Y    18   // Menu vertical offset
 #define ALT_MENU_OFFSET_X    0    // Menu horizontal offset
 #define ALT_MENU_OFFSET_Y    0    // Menu vertical offset
 #define MENU_DELTA_X    10    // Menu width delta

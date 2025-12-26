@@ -364,7 +364,7 @@ bool nvsErase()
 // Scan data persistence using LittleFS
 //
 
-#define SCAN_POINTS 200
+#define SCAN_POINTS 500  // Max points to save (stack-safe, most bands need <300)
 
 // Structure to save scan data to file
 struct SavedScanData

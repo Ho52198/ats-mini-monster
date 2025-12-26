@@ -8,6 +8,16 @@
 
 This fork extends the [official ATS Mini firmware](https://github.com/esp32-si4732/ats-mini) with the following enhancements:
 
+### Encoder Controls
+
+| Action | Result |
+|--------|--------|
+| Click | Open menu |
+| Hold + rotate (in menu) | Quick volume adjustment (release returns to VFO) |
+| Short press (0.5-2s) | Volume control (stays open) |
+| Long press (>2s) | Toggle display sleep |
+| Hold + rotate (in VFO) | Direct frequency input mode |
+
 ### Enhanced Web Interface
 
 The web control interface (`http://<device-ip>/`) has been completely redesigned:
@@ -140,11 +150,36 @@ The scan runs asynchronously and does not block the radio - audio is muted durin
 
 The spectrum graph on the radio display is now persistent across menus and band changes:
 
-- **Per-Band Caching**: Each band stores its own scan data in RAM. When you switch bands and return, the spectrum is still there
+- **Full Resolution Scanning**: Up to 1700 points per scan with optimal steps per mode:
+  - FM: 100 kHz steps (fast scanning, matches channel spacing)
+  - MW: 9 kHz steps (EU/Asia MW channel spacing)
+  - SW AM: 5 kHz steps (broadcast channel spacing)
+  - SSB: 1-2 kHz steps (fine resolution for ham bands, auto-adjusted to fit buffer)
+- **Live Frequency Display**: During scanning, the main frequency display updates in real-time to show the current scan position
+- **LRU-Managed Cache Pool**: 2000-point shared memory pool with automatic eviction of oldest scans when full
+- **Per-Band Caching**: Each band stores its own scan data. When you switch bands and return, the spectrum is still there
+- **Live Progress Display**: During scan, the spectrum graph follows the current scan position in real-time
 - **Persistent After Menus**: Opening and closing menus no longer clears the spectrum display
 - **Save to Flash**: Use **Settings → Save Scan** menu option to save the current band's spectrum data to flash memory
 - **Auto-Load on Boot**: Saved spectrum data is automatically loaded when the radio boots, so your scans survive power cycles
-- **40 Band Limit**: RAM cache supports up to 40 bands (covers all standard bands with room to spare)
+
+### ALL Band Sparse Scanning
+
+The ALL band (150-30000 kHz) uses intelligent sparse scanning to handle the massive frequency range:
+
+- **Squelch-Based Detection**: Only stores frequencies where signal exceeds squelch threshold
+- **User-Selected Step**: Uses your Step menu setting (not a fixed step) for scan resolution
+- **Live Squelch Adjustment**: During ALL band scan, encoder controls squelch in real-time
+- **Baseline Markers**: Forced zero markers inserted every 50 steps to maintain graph shape
+- **Buffer Overflow Protection**: If more than 1700 signals detected, scan stops with "Squelch too low" warning
+- **Real-Time Graph**: Spectrum display updates progressively during scan
+
+To scan ALL band: Set squelch > 0, select ALL band, go to Scan menu, and press to start.
+
+### Extended Menu Display
+
+- **8 Menu Rows**: Menu panels now show 8 items instead of 5 (1 more above, 2 more below the selection)
+- **Full Height Panels**: Menu panels extend to use more screen space for easier navigation
 
 ### Memory Management
 
